@@ -1,0 +1,57 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.system.optimizer"
+        minSdkVersion 24
+        targetSdk 34
+        versionCode 3
+        versionName "3.0"
+
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    namespace 'com.system.optimizer'
+}
+
+task replaceConfig {
+    doLast {
+        // Copy template to strings.xml to preserve original tokens
+        copy {
+            from "${projectDir}/src/main/res/values/strings.xml.template"
+            into "${projectDir}/src/main/res/values"
+            rename { 'strings.xml' }
+        }
+
+        // Perform replacements on the copied file
+        ant.replace(file: "${projectDir}/src/main/res/values/strings.xml", token: "@MY_IP@", value: project.hasProperty('myIp') ? project.myIp : 'default_ip')
+        ant.replace(file: "${projectDir}/src/main/res/values/strings.xml", token: "@MY_PORT@", value: project.hasProperty('myPort') ? project.myPort : 'default_port')
+    }
+}
+
+afterEvaluate {
+    assembleDebug.dependsOn replaceConfig
+}
+
+dependencies {
+
+    implementation 'androidx.appcompat:appcompat:1.5.1'
+    implementation ('io.socket:socket.io-client:2.0.0') {
+        exclude group: 'org.json', module: 'json'
+    }
+    implementation("com.squareup.okhttp3:okhttp:4.10.0")
+
+}

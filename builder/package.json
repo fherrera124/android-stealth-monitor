@@ -1,0 +1,8 @@
+{
+  "name": "android-builder",
+  "version": "1.0.0",
+  "main": "builder.js",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

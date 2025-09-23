@@ -1,0 +1,218 @@
+const devices = document.getElementById("devices")
+const infos = document.getElementById("infos")
+const form = document.getElementById("left")
+const msgs = document.getElementById("msgs")
+const output = document.getElementById("output")
+const ipInput = document.getElementById('ipInput')
+
+let currentDevice = ""
+let previousDevice = ""
+let currentDeviceConnected = false
+
+document.querySelectorAll("form").forEach(e => {
+    e.addEventListener("submit", i => i.preventDefault())
+})
+
+/* Clearing */
+// form.reset()
+infos.innerHTML = '<div class="info">    <span>Brand :</span>    <span>--</span></div><div class="info">    <span>Model :</span>    <span>--</span></div><div class="info">    <span>Manufacture :</span>    <span>--</span></div><div class="device-action"><div class="screenshot-button" onclick="takeScreenshot()" title="Take Screenshot"><img src="../img/screenshot.png" alt="Take Screenshot"><span>Take Screenshot</span></div></div>'
+
+async function getInfo(id) {
+    previousDevice = currentDevice;
+    if (id != "None") {
+        $.ajax({
+            url: document.location.origin + '/info',
+            method: 'POST',
+            type: 'POST',
+            data: {
+                id: id,
+            },
+            success: async (data) => {
+                // console.log(data)
+                currentDevice = id
+                currentDeviceConnected = data.connected !== false
+                tmp = ""
+                delete data['ID']
+                for (i in data) {
+                    tmp += `<div class="info">
+                    <span>${i} :</span>
+                    <span>${data[i]}</span>
+                </div>`
+                }
+                // Preserve the screenshot button when updating device info
+                infos.innerHTML = tmp + '<div class="device-action"><div class="screenshot-button" onclick="takeScreenshot()" title="Take Screenshot"><img src="../img/screenshot.png" alt="Take Screenshot"><span>Take Screenshot</span></div></div>'
+                updateScreenshotButton()
+                // Fetch existing logs
+                socket.emit("get_device_logs", id);
+            }
+        })
+    } else {
+        currentDevice = ""
+        previousDevice = "";
+        currentDeviceConnected = false;
+        infos.innerHTML = '<div class="info">    <span>Brand :</span>    <span>--</span></div><div class="info">    <span>Model :</span>    <span>--</span></div><div class="info">    <span>Manufacture :</span>    <span>--</span></div><div class="device-action"><div class="screenshot-button" onclick="takeScreenshot()" title="Take Screenshot"><img src="../img/screenshot.png" alt="Take Screenshot"><span>Take Screenshot</span></div></div>'
+        updateScreenshotButton()
+        output.value = "";
+        updateScreenshotButton();
+    }
+}
+
+/** Making Socket Connections */
+const socket = io(`ws://${document.location.hostname}:4001/`, { transports: ['websocket'], upgrade: false })
+
+socket.on("logger", ({device, log}) => {
+    if (device === currentDevice) {
+        // console.log(log)
+        output.value += log.trim() + "\n";
+        output.scrollTop = output.scrollHeight;
+    }
+})
+
+socket.on("device_logs", (logs) => {
+    output.value = logs.join('\n');
+    if (output.value) {
+        output.scrollTop = output.scrollHeight;
+    }
+})
+
+socket.on("info", (data) => {
+    // console.log(data)
+    devices.innerHTML = '<option data-display="Devices">None</option>'
+    data.forEach(i => {
+        const status = i.connected === false ? " [offline]" : "";
+        devices.insertAdjacentHTML("beforeend", `<option value="${i.ID}">${i.Brand} (${i.Model})${status}</option>`)
+    })
+    $("select").niceSelect("update")
+    // Update screenshot button state after devices are loaded
+    updateScreenshotButton()
+})
+
+socket.on("screenshot_ready", (data) => {
+    if (data.device_uuid === currentDevice) {
+        const filename = data.filename || 'screenshot.jpg';
+        const imageUrl = window.location.origin + '/screenshots/' + filename;
+        const a = document.createElement('a');
+        a.href = imageUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        showMsg(`Screenshot downloaded: ${filename}`);
+
+        // Optional: Preview in modal (uncomment if desired)
+        // const modal = document.createElement('div');
+        // modal.innerHTML = `<img src="${imageUrl}" style="max-width:100%; height:auto;" /><button onclick="this.parentElement.remove()">Close</button>`;
+        // modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:white;';
+        // document.body.appendChild(modal);
+    }
+});
+
+socket.on("screenshot_error", (data) => {
+    if (data.device_uuid === currentDevice) {
+        showMsg(`Screenshot error: ${data.error}`);
+    }
+});
+
+
+
+/** Functions */
+
+function updateScreenshotButton() {
+    const screenshotButton = document.querySelector('.screenshot-button');
+    console.log('updateScreenshotButton called:', {
+        currentDevice,
+        currentDeviceConnected,
+        screenshotButton: !!screenshotButton
+    });
+
+    if (!screenshotButton) {
+        console.log('Screenshot button not found!');
+        return;
+    }
+
+    // Check if no device is selected or device is offline
+    const isDisabled = !currentDevice || !currentDeviceConnected;
+    console.log('Button should be disabled:', isDisabled);
+
+    if (isDisabled) {
+        screenshotButton.classList.add('disabled');
+        screenshotButton.title = !currentDevice ? "Please select a device first" : "Device is offline";
+        console.log('Button disabled, class added');
+    } else {
+        screenshotButton.classList.remove('disabled');
+        screenshotButton.title = "Take Screenshot";
+        console.log('Button enabled, class removed');
+    }
+
+    console.log('Final button classes:', screenshotButton.className);
+}
+
+function takeScreenshot() {
+    if (!currentDevice) {
+        showMsg("Please select a device first.");
+        return;
+    }
+
+    if (!currentDeviceConnected) {
+        showMsg("Cannot take screenshot: Device is offline.");
+        return;
+    }
+
+    socket.emit("screenshot_req", currentDevice);
+    showMsg("Screenshot request sent. Waiting for response...");
+}
+
+
+function download() {
+    var data = ipInput.value.trim()
+    try {
+        if (data.length) {
+            var [m_ip, m_port] = data.split(':')
+            console.log()
+            $.ajax({
+                url: `/setup/${m_ip}/${m_port}`,
+                success: (data) => {
+                    if (data.success) {
+                        var a = document.createElement('a')
+                        a.href = window.location.protocol + '//' + window.location.hostname + ':8080/download-apk'
+                        a.download = 'app-debug.apk'
+                        a.click()
+                    } else {
+                        showMsg(data.error || 'Build failed')
+                    }
+                },
+                error: function () {
+                    showMsg('Build request failed')
+                }
+            })
+        } else {
+            showMsg('Invalid Ip and Port. [ IP:PORT ]')
+        }
+    } catch (error) {
+        showMsg('Invalid Ip and Port. [ IP:PORT ]')
+    }
+}
+
+function downloadLatest() {
+  var a = document.createElement('a');
+  a.href = window.location.protocol + '//' + window.location.hostname + ':8080/download-apk';
+  a.download = 'latest-app-debug.apk';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function showMsg(msg) {
+    var pTag = document.createElement("p")
+    pTag.className = "msg"
+    pTag.innerText = msg
+    msgs.insertAdjacentElement("beforeend", pTag)
+    setTimeout(() => pTag.remove(), 5000)
+}
+
+$(document).ready(() => {
+    $("select").niceSelect()
+    // Initialize screenshot button state
+    updateScreenshotButton()
+})
+

@@ -1,0 +1,34 @@
+services:
+  portal:
+    build:
+      context: ./portal
+      dockerfile: Dockerfile
+    volumes:
+      - ./portal:/app
+      - /app/node_modules
+    ports:
+      - "4000:4000"
+      - "4001:4001"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    privileged: true
+    depends_on:
+      - android-builder
+
+  android-builder:
+    build:
+      context: ./builder
+      dockerfile: Dockerfile.builder
+    volumes:
+      - ./builder/project:/project
+      - ./builder/project/.gradle:/root/.gradle
+    ports:
+      - "8080:8080"
+    environment:
+      - ANDROID_HOME=/opt/android-sdk
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
