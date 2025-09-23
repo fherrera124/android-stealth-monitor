@@ -38,9 +38,13 @@ input, textarea, button, select {
 }
 
 #mainBody header img {
-  height: 2rem;
-  width: auto;
-  max-width: 3rem;
+   height: 2rem;
+   width: auto;
+   max-width: 3rem;
+}
+
+#mainBody header p {
+   color: rgb(100, 149, 237);
 }
 #mainBody #container {
   width: 100%;
@@ -186,45 +190,6 @@ input, textarea, button, select {
   outline: none;
 }
 
-.section-title {
-     font-size: 0.9rem;
-     font-weight: 600;
-     color: #333;
-     text-align: center;
-     margin: 0.5rem 0 0.3rem 0;
-     padding: 0;
-     display: flex;
-     align-items: center;
-     justify-content: center;
-     gap: 0.5rem;
-     position: relative;
- }
-
- .info-icon {
-     display: inline-flex;
-     align-items: center;
-     justify-content: center;
-     width: 18px;
-     height: 18px;
-     color: #666;
-     cursor: help;
-     transition: color 300ms ease;
-     border-radius: 50%;
-     background-color: transparent;
-     border: 1px solid transparent;
- }
-
- .info-icon:hover {
-     color: #2097f3;
-     background-color: rgba(32, 151, 243, 0.1);
-     border-color: rgba(32, 151, 243, 0.2);
- }
-
- .info-icon svg {
-     width: 14px;
-     height: 14px;
- }
-
  .section-container {
      margin-top: 1rem;
      background-color: #ffffff;
@@ -248,23 +213,38 @@ input, textarea, button, select {
  }
 
 
-#ipInput {
-    border: 1px solid #dee2e6;
-    border-radius: 5px;
-    width: calc(100% - 2rem);
-    padding: 0.5rem 1rem;
-    text-align: left;
-    background-color: #ffffff;
-    color: #495057;
-    font-size: 0.9rem;
-    font-weight: 500;
-    transition: all 300ms ease;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    flex: 1;
-    min-width: 120px;
+.input-row {
+    display: flex;
+    gap: 0.5rem;
+    width: 100%;
+    margin-bottom: 0.5rem;
 }
 
-#ipInput:focus {
+#ipInput, #portInput {
+     border: 1px solid #dee2e6;
+     border-radius: 5px;
+     padding: 0.5rem 1rem;
+     text-align: left;
+     background-color: #ffffff;
+     color: #495057;
+     font-size: 0.9rem;
+     font-weight: 500;
+     transition: all 300ms ease;
+     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+     flex: 1;
+     min-width: 120px;
+}
+
+#ipInput {
+    flex: 2;
+}
+
+#portInput {
+    flex: 1;
+    max-width: 120px;
+}
+
+#ipInput:focus, #portInput:focus {
     outline: none;
     border-color: #2196f3;
     background-color: #f8f9ff;
@@ -272,13 +252,13 @@ input, textarea, button, select {
     transform: translateY(-1px);
 }
 
-#ipInput:hover {
+#ipInput:hover, #portInput:hover {
     border-color: #2196f3;
     box-shadow: 0 2px 4px rgba(33, 150, 243, 0.15);
 }
 
-#ipInput::placeholder {
-    color: transparent;
+#ipInput::placeholder, #portInput::placeholder {
+     color: #6c757d;
 }
 
 .section-apk img {
@@ -421,4 +401,76 @@ input, textarea, button, select {
         padding: 0.5rem 0.5rem 1rem 0.5rem;
         max-width: 100%;
     }
+
+    .input-row {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    #ipInput, #portInput {
+        max-width: 100%;
+    }
+}
+
+.build-progress {
+    width: 100%;
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background-color: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2196f3, #21cbf3);
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.3s ease-in-out;
+    position: relative;
+}
+
+.progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.4),
+        transparent
+    );
+    animation: progress-shine 2s infinite;
+}
+
+@keyframes progress-shine {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+.progress-text {
+    text-align: center;
+    font-size: 0.85rem;
+    color: #495057;
+    font-weight: 500;
+    margin: 0;
 }

