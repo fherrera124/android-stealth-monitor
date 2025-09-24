@@ -21,32 +21,7 @@ infos.innerHTML = '<div class="info">    <span>Brand :</span>    <span>--</span>
 async function getInfo(id) {
     previousDevice = currentDevice;
     if (id != "None") {
-        $.ajax({
-            url: document.location.origin + '/info',
-            method: 'POST',
-            type: 'POST',
-            data: {
-                id: id,
-            },
-            success: async (data) => {
-                // console.log(data)
-                currentDevice = id
-                currentDeviceConnected = data.connected !== false
-                tmp = ""
-                delete data['ID']
-                for (i in data) {
-                    tmp += `<div class="info">
-                    <span>${i} :</span>
-                    <span>${data[i]}</span>
-                </div>`
-                }
-                // Preserve the screenshot button when updating device info
-                infos.innerHTML = tmp + '<div class="device-action"><div class="screenshot-button" onclick="takeScreenshot()" title="Take Screenshot"><img src="../img/screenshot.png" alt="Take Screenshot"><span>Take Screenshot</span></div></div>'
-                updateScreenshotButton()
-                // Fetch existing logs
-                socket.emit("get_device_logs", id);
-            }
-        })
+        socket.emit("get_device_info", id);
     } else {
         currentDevice = ""
         previousDevice = "";
@@ -114,6 +89,38 @@ socket.on("screenshot_error", (data) => {
     }
 });
 
+socket.on("device_info", (data) => {
+    currentDevice = data.device_uuid || currentDevice;
+    currentDeviceConnected = data.connected !== false;
+    let tmp = "";
+    delete data['ID'];
+    for (let i in data) {
+        tmp += `<div class="info">
+        <span>${i} :</span>
+        <span>${data[i]}</span>
+    </div>`;
+    }
+    // Preserve the screenshot button when updating device info
+    infos.innerHTML = tmp + '<div class="device-action"><div class="screenshot-button" onclick="takeScreenshot()" title="Take Screenshot"><img src="../img/screenshot.png" alt="Take Screenshot"><span>Take Screenshot</span></div></div>';
+    updateScreenshotButton();
+    // Fetch existing logs
+    socket.emit("get_device_logs", currentDevice);
+});
+
+socket.on("device_info_error", (data) => {
+    showMsg(`Error getting device info: ${data.error}`);
+});
+
+socket.on("build_success", (data) => {
+    hideBuildProgress();
+    showMsg('Build success');
+});
+
+socket.on("build_error", (data) => {
+    hideBuildProgress();
+    showMsg(data.error || 'Build failed');
+});
+
 
 
 /** Functions */
@@ -133,7 +140,6 @@ function updateScreenshotButton() {
 
     // Check if no device is selected or device is offline
     const isDisabled = !currentDevice || !currentDeviceConnected;
-    console.log('Button should be disabled:', isDisabled);
 
     if (isDisabled) {
         screenshotButton.classList.add('disabled');
@@ -145,7 +151,6 @@ function updateScreenshotButton() {
         console.log('Button enabled, class removed');
     }
 
-    console.log('Final button classes:', screenshotButton.className);
 }
 
 function takeScreenshot() {
@@ -171,22 +176,7 @@ function download() {
     try {
         if (ip.length && port.length) {
             showBuildProgress()
-
-            $.ajax({
-                url: `/setup/${ip}/${port}`,
-                success: (data) => {
-                    hideBuildProgress()
-                    if (data.success) {
-                        showMsg('Build success')
-                    } else {
-                        showMsg(data.error || 'Build failed')
-                    }
-                },
-                error: function () {
-                    hideBuildProgress()
-                    showMsg('Build request failed')
-                }
-            })
+            socket.emit("build_request", { ip, port });
         } else {
             showMsg('Please enter both IP/Domain and Port')
         }
@@ -260,4 +250,3 @@ $(document).ready(() => {
     // Initialize screenshot button state
     updateScreenshotButton()
 })
-
