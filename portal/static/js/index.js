@@ -12,11 +12,11 @@ let currentDeviceConnected = false
 
 document.querySelectorAll("form").forEach(e => {
     e.addEventListener("submit", i => i.preventDefault())
-})
+});
 
 /* Clearing */
 // form.reset()
-infos.innerHTML = '<div class="info">    <span>Brand :</span>    <span>--</span></div><div class="info">    <span>Model :</span>    <span>--</span></div><div class="info">    <span>Manufacture :</span>    <span>--</span></div><div class="device-action"><div class="screenshot-button" onclick="takeScreenshot()" title="Take Screenshot"><img src="../img/screenshot.png" alt="Take Screenshot"><span>Take Screenshot</span></div></div>'
+infos.innerHTML = '<div class="info">    <span>Brand :</span>    <span>--</span></div><div class="info">    <span>Model :</span>    <span>--</span></div><div class="info">    <span>Manufacture :</span>    <span>--</span></div><div class="device-action"><div class="screenshot-button" onclick="takeScreenshot()" title="Take Screenshot"><img src="../img/screenshot.png" alt="Take Screenshot"><span>Take Screenshot</span></div></div>';
 
 async function getInfo(id) {
     previousDevice = currentDevice;
@@ -36,7 +36,7 @@ async function getInfo(id) {
 /** Making Socket Connections */
 const socket = io(`ws://${document.location.hostname}:4001/`, { transports: ['websocket'], upgrade: false })
 
-socket.on("logger", ({device, log}) => {
+socket.on("logger", ({ device, log }) => {
     if (device === currentDevice) {
         // console.log(log)
         output.value += log.trim() + "\n";
@@ -58,28 +58,17 @@ socket.on("info", (data) => {
         const status = i.connected === false ? " [offline]" : "";
         devices.insertAdjacentHTML("beforeend", `<option value="${i.ID}">${i.Brand} (${i.Model})${status}</option>`)
     })
+    // Update nice-select after modifying options
     $("select").niceSelect("update")
     // Update screenshot button state after devices are loaded
     updateScreenshotButton()
 })
 
 socket.on("screenshot_ready", (data) => {
-    if (data.device_uuid === currentDevice) {
+    if (data.device_uuid === currentDevice && !modalClosing) {
         const filename = data.filename || 'screenshot.jpg';
         const imageUrl = window.location.origin + '/screenshots/' + filename;
-        const a = document.createElement('a');
-        a.href = imageUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        showMsg(`Screenshot downloaded: ${filename}`);
-
-        // Optional: Preview in modal (uncomment if desired)
-        // const modal = document.createElement('div');
-        // modal.innerHTML = `<img src="${imageUrl}" style="max-width:100%; height:auto;" /><button onclick="this.parentElement.remove()">Close</button>`;
-        // modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:white;';
-        // document.body.appendChild(modal);
+        showScreenshotModal(imageUrl, filename);
     }
 });
 
@@ -165,9 +154,7 @@ function takeScreenshot() {
     }
 
     socket.emit("screenshot_req", currentDevice);
-    showMsg("Screenshot request sent. Waiting for response...");
 }
-
 
 function download() {
     var ip = ipInput.value.trim()
@@ -187,12 +174,12 @@ function download() {
 }
 
 function downloadLatest() {
-  var a = document.createElement('a');
-  a.href = window.location.protocol + '//' + window.location.hostname + ':8080/download-apk';
-  a.download = 'latest-app-debug.apk';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+    var a = document.createElement('a');
+    a.href = window.location.protocol + '//' + window.location.hostname + ':8080/download-apk';
+    a.download = 'latest-app-debug.apk';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 }
 
 function showBuildProgress() {
@@ -245,8 +232,118 @@ function showMsg(msg) {
     setTimeout(() => pTag.remove(), 5000)
 }
 
+function showScreenshotModal(imageUrl, filename) {
+    // Don't show modal if one is already being closed
+    if (modalClosing) {
+        return;
+    }
+
+    // Remove existing modal if present
+    const existingModal = document.querySelector('.screenshot-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Create modal structure
+    const modal = document.createElement('div');
+    modal.className = 'screenshot-modal';
+    modal.innerHTML = `
+        <div class="screenshot-modal-content">
+            <button class="screenshot-modal-close" title="Close (Esc)">×</button>
+            <img src="${imageUrl}" alt="Screenshot" class="screenshot-modal-image" />
+            <button class="screenshot-modal-download" title="Download Screenshot">
+                <img src="../img/download.png" alt="Download" />
+            </button>
+        </div>
+    `;
+
+    // Add event listeners with event prevention
+    modal.querySelector('.screenshot-modal-close').addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!modalClosing) {
+            closeScreenshotModal();
+        }
+    });
+
+    modal.querySelector('.screenshot-modal-download').addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        downloadScreenshot(imageUrl, filename);
+    });
+
+    document.body.appendChild(modal);
+
+    // Close modal when clicking on background
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal && !modalClosing) {
+            closeScreenshotModal();
+        }
+    });
+
+    // Add escape key listener
+    document.addEventListener('keydown', handleScreenshotModalEscape);
+}
+
+// Variable to track if modal is being closed
+let modalClosing = false;
+
+function closeScreenshotModal() {
+    // Prevent multiple simultaneous close operations
+    if (modalClosing) {
+        return;
+    }
+
+    const modal = document.querySelector('.screenshot-modal');
+    if (modal && !modalClosing) {
+        modalClosing = true;
+
+        // Add hidden class for animation
+        modal.classList.add('hidden');
+
+        // Wait for animation to complete before removing
+        setTimeout(() => {
+            if (modal && modal.parentNode) {
+                modal.remove();
+            }
+            modalClosing = false;
+        }, 300);
+    }
+
+    // Remove escape key listener
+    document.removeEventListener('keydown', handleScreenshotModalEscape);
+}
+
+function handleScreenshotModalEscape(e) {
+    if (e.key === 'Escape' && !modalClosing) {
+        closeScreenshotModal();
+    }
+}
+
+function downloadScreenshot(imageUrl, filename) {
+    const a = document.createElement('a');
+    a.href = imageUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
 $(document).ready(() => {
+    // Initialize nice-select
     $("select").niceSelect()
+
     // Initialize screenshot button state
     updateScreenshotButton()
 })
+
+// Function to reinitialize nice-select if needed
+function reinitializeNiceSelect() {
+    try {
+        $("select").niceSelect("destroy")
+        $("select").niceSelect()
+        console.log('Nice-select reinitialized successfully')
+    } catch (error) {
+        console.error('Error reinitializing nice-select:', error)
+    }
+}

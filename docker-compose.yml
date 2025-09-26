@@ -21,7 +21,7 @@ services:
   android-builder:
     build:
       context: ./builder
-      dockerfile: Dockerfile.builder
+      dockerfile: Dockerfile
     volumes:
       - ./builder/project:/project
       - ./builder/project/.gradle:/root/.gradle

