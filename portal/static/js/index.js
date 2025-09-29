@@ -8,7 +8,6 @@ const portInput = document.getElementById('portInput')
 
 let currentDevice = ""
 let previousDevice = ""
-let currentDeviceConnected = false
 
 document.querySelectorAll("form").forEach(e => {
     e.addEventListener("submit", i => i.preventDefault())
@@ -25,7 +24,6 @@ async function getInfo(id) {
     } else {
         currentDevice = ""
         previousDevice = "";
-        currentDeviceConnected = false;
         infos.innerHTML = '<div class="info">    <span>Brand :</span>    <span>--</span></div><div class="info">    <span>Model :</span>    <span>--</span></div><div class="info">    <span>Manufacture :</span>    <span>--</span></div><div class="device-action"><div class="screenshot-button" onclick="takeScreenshot()" title="Take Screenshot"><img src="../img/screenshot.png" alt="Take Screenshot"><span>Take Screenshot</span></div></div>'
         updateScreenshotButton()
         output.value = "";
@@ -55,8 +53,7 @@ socket.on("info", (data) => {
     // console.log(data)
     devices.innerHTML = '<option data-display="Devices">None</option>'
     data.forEach(i => {
-        const status = i.connected === false ? " [offline]" : "";
-        devices.insertAdjacentHTML("beforeend", `<option value="${i.ID}">${i.Brand} (${i.Model})${status}</option>`)
+        devices.insertAdjacentHTML("beforeend", `<option value="${i.ID}">${i.Brand} (${i.Model})</option>`)
     })
     // Update nice-select after modifying options
     $("select").niceSelect("update")
@@ -80,7 +77,6 @@ socket.on("screenshot_error", (data) => {
 
 socket.on("device_info", (data) => {
     currentDevice = data.device_uuid || currentDevice;
-    currentDeviceConnected = data.connected !== false;
     let tmp = "";
     delete data['ID'];
     for (let i in data) {
@@ -118,7 +114,6 @@ function updateScreenshotButton() {
     const screenshotButton = document.querySelector('.screenshot-button');
     console.log('updateScreenshotButton called:', {
         currentDevice,
-        currentDeviceConnected,
         screenshotButton: !!screenshotButton
     });
 
@@ -127,12 +122,12 @@ function updateScreenshotButton() {
         return;
     }
 
-    // Check if no device is selected or device is offline
-    const isDisabled = !currentDevice || !currentDeviceConnected;
+    // Check if no device is selected
+    const isDisabled = !currentDevice;
 
     if (isDisabled) {
         screenshotButton.classList.add('disabled');
-        screenshotButton.title = !currentDevice ? "Please select a device first" : "Device is offline";
+        screenshotButton.title = "Please select a device first";
         console.log('Button disabled, class added');
     } else {
         screenshotButton.classList.remove('disabled');
@@ -145,11 +140,6 @@ function updateScreenshotButton() {
 function takeScreenshot() {
     if (!currentDevice) {
         showMsg("Please select a device first.");
-        return;
-    }
-
-    if (!currentDeviceConnected) {
-        showMsg("Cannot take screenshot: Device is offline.");
         return;
     }
 

