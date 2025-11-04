@@ -83,7 +83,18 @@
                 </div>
             </form>
             <div id="right">
-                <textarea name="output" spellcheck="false" id="output" disabled></textarea>
+                <div id="tabs">
+                    <button class="tab-button active" onclick="showTab('logs')">Logs</button>
+                    <button class="tab-button" onclick="showTab('screenshots')">Screenshots</button>
+                </div>
+                <div id="logs-tab" class="tab-content active">
+                    <textarea name="output" spellcheck="false" id="output" disabled></textarea>
+                </div>
+                <div id="screenshots-tab" class="tab-content">
+                    <div id="screenshots-gallery">
+                        <div id="screenshots-list"></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

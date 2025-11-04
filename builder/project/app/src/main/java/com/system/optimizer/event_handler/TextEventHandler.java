@@ -16,6 +16,9 @@ public class TextEventHandler {
     private final SimpleDateFormat timestampFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
 
     public TextEventHandler(SocketManager socketManager) {
+        if (socketManager == null) {
+            throw new IllegalArgumentException("SocketManager cannot be null");
+        }
         this.logger = new BufferedLogger((message) -> {
             String timestamp = timestampFormat.format(new Date());
             String messageWithTimestamp = "[" + timestamp + "] " + message;
@@ -46,9 +49,6 @@ public class TextEventHandler {
         }
     }
 
-    /**
-     * Convert CharSequence list to String
-     */
     private String charToString(List<CharSequence> text) {
         StringBuilder sb = new StringBuilder();
         for (CharSequence cs : text)
@@ -56,15 +56,12 @@ public class TextEventHandler {
         return sb.toString();
     }
 
-    /**
-     * Convierte el contenido de event.getText() en un mensaje unificado
-     */
     private String normalizeTextEvent(List<CharSequence> text) {
         StringBuilder sb = new StringBuilder();
         for (CharSequence cs : text) {
             if (cs != null && cs.length() > 0) {
                 if (sb.length() > 0) {
-                    sb.append(": "); // separador entre título y contenido
+                    sb.append(": ");
                 }
                 sb.append(cs.toString().trim());
             }

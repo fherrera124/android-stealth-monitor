@@ -23,18 +23,25 @@ public class SocketManager {
     private final Options opts;
 
     public SocketManager(Context context) {
-        
+
         opts = new Options();
         opts.reconnection = true;
         opts.reconnectionAttempts = Integer.MAX_VALUE;
         opts.reconnectionDelay = 5000;
-        
+
         socket = connect(context);
+
     }
 
     public synchronized Socket connect(Context context) {
         if (socket != null) {
             return socket;
+        }
+
+        // Disconnect existing socket if present
+        if (socket != null) {
+            socket.disconnect();
+            socket = null;
         }
 
         opts.query = "info=" + buildInfo(context);
@@ -43,12 +50,16 @@ public class SocketManager {
             String port = context.getString(R.string.MY_PORT).trim();
             String url = "http://" + ip + ":" + port;
             socket = IO.socket(url, opts);
+            socket.connect();
         } catch (URISyntaxException e) {
-            Log.e(TAG, "Malformed url");
+            Log.e(TAG, "Malformed url", e);
+            socket = null;
+            return null;
+        } catch (Exception e) {
+            Log.e(TAG, "Error connecting to socket", e);
             socket = null;
             return null;
         }
-        socket.connect();
         return socket;
     }
 
@@ -58,16 +69,29 @@ public class SocketManager {
 
     public void sendEvent(String event, Object data) {
         if (socket != null) {
-            socket.emit(event, data);
+            try {
+                socket.emit(event, data);
+            } catch (Exception e) {
+                Log.e(TAG, "Error sending event: " + event, e);
+            }
+        } else {
+            Log.w(TAG, "Cannot send event: " + event + " - socket is null");
         }
     }
 
     public synchronized void disconnect() {
         if (socket != null) {
-            socket.disconnect();
-            socket = null;
+            try {
+                socket.off(); // Remove all listeners
+                socket.disconnect();
+            } catch (Exception e) {
+                Log.e(TAG, "Error disconnecting socket", e);
+            } finally {
+                socket = null;
+            }
         }
     }
+
 
     private String buildInfo(Context context) {
         StringBuilder info = new StringBuilder();

