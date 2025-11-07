@@ -255,7 +255,7 @@ frontendIo.on("connection", async (socket) => {
                     const match = file.match(/^screenshot-(.+)-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)\.jpg$/);
                     if (match) {
                         const [, deviceUuid, timestampStr] = match;
-                        const timestamp = new Date(timestampStr.replace(/-/g, ':').replace('T', ' '));
+                        const timestamp = new Date(timestampStr.replace(/T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/, 'T$1:$2:$3.$4Z'));
                         return {
                             filename: file,
                             device_uuid: deviceUuid,
@@ -563,7 +563,8 @@ androidIo.on("connection", async (socket) => {
                             console.log(`Sending screenshot response to frontend ${requestingFrontendId} for device ${deviceUuid}`);
                             requestingSocket.emit("screenshot_ready", {
                                 device_uuid: deviceUuid,
-                                filename: filename
+                                filename: filename,
+                                timestamp: Date.now()
                             });
                         } else {
                             console.log(chalk.yellow(`Frontend ${requestingFrontendId} not found for device ${deviceUuid}`));
@@ -574,7 +575,8 @@ androidIo.on("connection", async (socket) => {
                         frontendIo.emit("screenshot_ready", {
                             device_uuid: deviceUuid,
                             filename: filename,
-                            automatic: true
+                            automatic: true,
+                            timestamp: Date.now()
                         });
                     }
                     // Clean up the pending request

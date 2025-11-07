@@ -26,7 +26,6 @@ async function getInfo(id) {
         currentDevice = ""
         previousDevice = "";
         infos.innerHTML = '<div class="info">    <span>Brand :</span>    <span>--</span></div><div class="info">    <span>Model :</span>    <span>--</span></div><div class="info">    <span>Manufacture :</span>    <span>--</span></div><div class="device-action"><div class="screenshot-button" onclick="takeScreenshot()" title="Take Screenshot"><img src="../img/screenshot.png" alt="Take Screenshot"><span>Take Screenshot</span></div></div>'
-        updateScreenshotButton()
         output.value = "";
         updateScreenshotButton();
         if (document.getElementById('screenshots-tab').classList.contains('active')) {
@@ -69,6 +68,30 @@ socket.on("screenshot_ready", (data) => {
     if (data.device_uuid === currentDevice && !modalClosing) {
         const filename = data.filename || 'screenshot.jpg';
         const imageUrl = window.location.origin + '/screenshots/' + filename;
+
+        // If screenshots tab is active, append the new screenshot to the gallery
+        if (document.getElementById('screenshots-tab').classList.contains('active')) {
+            // Parse timestamp from filename for consistency
+            const match = filename.match(/^screenshot-(.+)-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)\.jpg$/);
+            let timestamp = Date.now(); // fallback
+            if (match) {
+                const [, deviceUuid, timestampStr] = match;
+                const parsedDate = new Date(timestampStr.replace(/T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/, 'T$1:$2:$3.$4Z'));
+                if (!isNaN(parsedDate.getTime())) {
+                    timestamp = parsedDate.getTime();
+                }
+            }
+            const newScreenshot = {
+                filename: data.filename,
+                device_uuid: data.device_uuid,
+                timestamp: timestamp,
+                url: imageUrl,
+                automatic: data.automatic || false
+            };
+            currentScreenshots.unshift(newScreenshot); // Add to beginning for descending order
+            updateScreenshotsGallery(currentScreenshots);
+        }
+
         showScreenshotModal(imageUrl, filename);
     }
 });
@@ -333,7 +356,6 @@ function showScreenshotModal(imageUrl, filename, currentIndex = 0) {
     modal.querySelector('.screenshot-modal-delete').addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        const currentIndex = parseInt(modal.dataset.currentIndex) || 0;
         deleteCurrentScreenshot(currentIndex);
     });
 
@@ -467,7 +489,11 @@ function navigateScreenshot(direction, currentIndex) {
 }
 
 function deleteCurrentScreenshot(currentIndex) {
-    if (!currentScreenshots || currentScreenshots.length === 0) return;
+    if (!currentScreenshots || currentScreenshots.length === 0) {
+        // If currentScreenshots is empty, query to verify there are no screenshots
+        socket.emit("get_screenshots", currentDevice);
+        return;
+    }
 
     const screenshot = currentScreenshots[currentIndex];
     if (screenshot) {
@@ -562,6 +588,24 @@ function viewScreenshot(imageUrl, filename) {
     const currentIndex = currentScreenshots.findIndex(screenshot => screenshot.filename === filename);
     showScreenshotModal(imageUrl, filename, currentIndex);
 }
+
+function checkPassword() {
+    const password = document.getElementById('passwordInput').value;
+    if (password === '8888') {
+        document.getElementById('passwordOverlay').style.display = 'none';
+        document.getElementById('mainBody').style.display = 'block';
+    } else {
+        alert('Clave incorrecta. Intente nuevamente.');
+        document.getElementById('passwordInput').value = '';
+    }
+}
+
+document.getElementById('passwordSubmit').addEventListener('click', checkPassword);
+document.getElementById('passwordInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        checkPassword();
+    }
+});
 
 $(document).ready(() => {
     // Initialize nice-select
