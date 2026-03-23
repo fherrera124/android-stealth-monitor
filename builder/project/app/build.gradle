@@ -1,0 +1,54 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.system.optimizer"
+        minSdkVersion 24
+        targetSdk 34
+        versionCode 3
+        versionName "3.0"
+
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    namespace 'com.system.optimizer'
+}
+
+
+dependencies {
+
+    implementation 'androidx.appcompat:appcompat:1.5.1'
+    implementation ('io.socket:socket.io-client:2.0.0') {
+        exclude group: 'org.json', module: 'json'
+    }
+    implementation("com.squareup.okhttp3:okhttp:4.10.0")
+
+}
+
+// Task to generate only dynamic values in strings.xml
+task generateConfig {
+    doLast {
+        def stringsXml = file('src/main/res/values/strings.xml')
+        def content = """<resources>
+    <string name="CONFIG_URL">${project.configUrl}</string>
+</resources>"""
+        stringsXml.text = content
+        println "Generated dynamic config - Config URL: ${project.configUrl}"
+    }
+}
+
+// Ensure config is generated before building
+preBuild.dependsOn generateConfig

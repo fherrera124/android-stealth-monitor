@@ -1,0 +1,5 @@
+{
+  "socket_url": "example.com:4000",
+  "screenshot_quality": 70,
+  "auto_screenshot": true
+}
