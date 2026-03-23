@@ -26,4 +26,4 @@ Thumbs.db
 
 # Logs
 *.log
-portal/devices.db
+server/devices.db
