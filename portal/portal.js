@@ -75,7 +75,6 @@ const frontendIo = new Server(frontendServer, {
 });
 frontendIo.on("connection", async (socket) => {
     console.log(chalk.greenBright(`[+] Frontend Connected (${socket.id})`))
-    console.log(chalk.blue(`[i] Available events: ${socket.eventNames().join(', ')}`))
 
     // Enviar devices cacheados
     socket.emit("info", cachedDevices);

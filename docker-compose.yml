@@ -42,10 +42,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.android-portal.tls=true"
-      - "traefik.http.routers.android-portal.entrypoints=websecure"
       - "traefik.http.services.android-portal.loadbalancer.server.port=4001"
-      - "traefik.http.routers.android-portal.middlewares=portal-headers"
-      - "traefik.http.middlewares.portal-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
 
   android-builder:
     build:
