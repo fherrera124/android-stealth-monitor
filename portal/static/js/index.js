@@ -37,9 +37,11 @@ async function getInfo(id) {
 }
 
 /** Making Socket Connections */
-// Use same host as the page (without port) - Traefik will route correctly
-const socket = io(location.protocol + '//' + location.hostname, { 
-    transports: ['websocket', 'polling'],
+// Socket.IO automatically uses wss: for https: and ws: for http:
+// Only add port if it's explicitly in the URL
+const socketPort = location.port ? ':' + location.port : '';
+const socket = io(location.protocol + '//' + location.hostname + socketPort, {
+    transports: ['websocket'],
     upgrade: true
 })
 
