@@ -18,6 +18,7 @@ const serverClient = new Client(`${serverUrl}/portal`, {
     reconnection: true,
     reconnectionAttempts: 10,
     reconnectionDelay: 1000,
+    //transports: ['websocket', 'polling'],
 });
 
 serverClient.on("connect", () => {
@@ -66,9 +67,15 @@ const frontendServer = app.listen(frontendPort, "0.0.0.0", () => {
 });
 
 // Socket io Connection for Frontends
-const frontendIo = new Server(frontendServer);
+const frontendIo = new Server(frontendServer, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 frontendIo.on("connection", async (socket) => {
     console.log(chalk.greenBright(`[+] Frontend Connected (${socket.id})`))
+    console.log(chalk.blue(`[i] Available events: ${socket.eventNames().join(', ')}`))
 
     // Enviar devices cacheados
     socket.emit("info", cachedDevices);

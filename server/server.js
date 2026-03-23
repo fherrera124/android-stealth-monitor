@@ -78,6 +78,7 @@ setInterval(cleanupExpiredScreenshotRequests, 10000);
 const io = new Server(serverPort, {
     cors: {
         origin: "*",
+        methods: ["GET", "POST"]
     }
 });
 
