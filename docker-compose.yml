@@ -14,7 +14,7 @@ services:
     networks:
       - internal
       - default
-      #- proxy
+      - proxy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.android-server.tls=true"
@@ -38,7 +38,7 @@ services:
     networks:
       - internal
       - default
-      #- proxy
+      - proxy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.android-portal.tls=true"
@@ -66,5 +66,5 @@ networks:
   default:
   internal:
     internal: true
-  #proxy:
-  #  external: true
+  proxy:
+    external: true
