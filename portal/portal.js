@@ -72,7 +72,9 @@ app.get('/download-apk', async (req, res) => {
         res.setHeader('Content-Disposition', response.headers.get('Content-Disposition') || 'attachment; filename=app-debug.apk');
         res.setHeader('Content-Type', 'application/octet-stream');
         
-        response.body.pipe(res);
+        // Convert Web Stream to Node.js buffer for streaming
+        const buffer = await response.arrayBuffer();
+        res.send(Buffer.from(buffer));
     } catch (error) {
         console.error(chalk.red(`[!] APK download proxy error: ${error.message}`));
         res.status(502).send('APK not available. Have you built the app first?');
