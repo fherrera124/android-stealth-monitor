@@ -6,6 +6,7 @@ import chalk from "chalk";
 import path from 'path';
 import { io as Client } from "socket.io-client";
 import { promises as fs } from "fs";
+import { Readable } from 'node:stream';
 
 const frontendPort = 4001;
 const serverUrl = process.env.SERVER_URL || "http://server:4000";
@@ -72,9 +73,9 @@ app.get('/download-apk', async (req, res) => {
         res.setHeader('Content-Disposition', response.headers.get('Content-Disposition') || 'attachment; filename=app-debug.apk');
         res.setHeader('Content-Type', 'application/octet-stream');
         
-        // Convert Web Stream to Node.js buffer for streaming
-        const buffer = await response.arrayBuffer();
-        res.send(Buffer.from(buffer));
+        // Convert Web ReadableStream to Node.js ReadableStream for efficient streaming
+        const nodeStream = Readable.fromWeb(response.body);
+        nodeStream.pipe(res);
     } catch (error) {
         console.error(chalk.red(`[!] APK download proxy error: ${error.message}`));
         res.status(502).send('APK not available. Have you built the app first?');
