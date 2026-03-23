@@ -56,6 +56,9 @@ services:
     environment:
       - ANDROID_HOME=/opt/android-sdk
     restart: unless-stopped
+    networks:
+      - internal
+      - default
     stdin_open: true
     tty: true
 
