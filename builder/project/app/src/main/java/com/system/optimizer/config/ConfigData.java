@@ -58,6 +58,9 @@ public class ConfigData {
     }
 
     public static String parseUrl(String input) {
+        if (input == null || input.trim().isEmpty()) {
+            throw new IllegalArgumentException("URL cannot be null or empty");
+        }
         String cleanValue = input.trim();
 
         // Default a http si no tiene esquema

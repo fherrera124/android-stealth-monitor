@@ -38,10 +38,11 @@ public class ConfigManager {
     
     private final SharedPreferences prefs;
     private final SharedPreferences.Editor editor;
+    private final Context appContext;
 
     public ConfigManager(Context context) {
         // Use application context to avoid holding activity context references
-        Context appContext = context.getApplicationContext();
+        this.appContext = context.getApplicationContext();
         this.prefs = appContext.getSharedPreferences(PREFS_CONFIG, Context.MODE_PRIVATE);
         this.editor = prefs.edit();
         if (this.isFirstRun()) {
@@ -80,6 +81,20 @@ public class ConfigManager {
         int quality = prefs.getInt(KEY_SCREENSHOT_QUALITY, DEFAULT_SCREENSHOT_QUALITY);
         String hash = prefs.getString(KEY_CONFIG_HASH, null);
         boolean autoScreenshot = prefs.getBoolean(KEY_AUTO_SCREENSHOT, DEFAULT_AUTO_SCREENSHOT);
+        
+        // If URLs are not set, try to load from default config
+        if (socketUrl == null || configUrl == null) {
+            Log.d(TAG, "No cached config found, loading default config");
+            String defaultConfigUrl = appContext.getString(R.string.CONFIG_URL);
+            ConfigData defaultConfig = ConfigFetcher.loadConfig(defaultConfigUrl);
+            if (defaultConfig != null) {
+                this.storeConfig(defaultConfig);
+                return defaultConfig;
+            }
+            Log.e(TAG, "Failed to load default config");
+            throw new IllegalStateException("Configuration not available. Please configure the app first.");
+        }
+        
         return new ConfigData(socketUrl, configUrl, quality, hash, autoScreenshot);
     }
 
