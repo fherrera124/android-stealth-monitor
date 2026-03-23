@@ -6,7 +6,6 @@ import chalk from "chalk";
 import path from 'path';
 import { io as Client } from "socket.io-client";
 import { promises as fs } from "fs";
-import { createProxyMiddleware } from 'http-proxy-middleware';
 
 const frontendPort = 4001;
 const serverUrl = process.env.SERVER_URL || "http://server:4000";
@@ -59,14 +58,26 @@ app.use(express.static('static'))
 app.use('/screenshots', express.static('screenshots', { maxAge: '1h' }))
 
 // Proxy APK download requests to builder service
-const builderProxy = createProxyMiddleware({
-    target: 'http://android-builder:8080',
-    changeOrigin: true,
-    pathRewrite: {
-        '^/download-apk': '/download-apk',
-    },
+app.get('/download-apk', async (req, res) => {
+    try {
+        const builderUrl = 'http://android-builder:8080/download-apk';
+        console.log(chalk.blue(`[i] Proxying APK download from ${builderUrl}`));
+        
+        const response = await fetch(builderUrl);
+        
+        if (!response.ok) {
+            throw new Error(`Builder returned ${response.status}`);
+        }
+        
+        res.setHeader('Content-Disposition', response.headers.get('Content-Disposition') || 'attachment; filename=app-debug.apk');
+        res.setHeader('Content-Type', 'application/octet-stream');
+        
+        response.body.pipe(res);
+    } catch (error) {
+        console.error(chalk.red(`[!] APK download proxy error: ${error.message}`));
+        res.status(502).send('APK not available. Have you built the app first?');
+    }
 });
-app.use('/download-apk', builderProxy);
 
 // Serve main HTML file at root
 app.get('/', (req, res) => {
