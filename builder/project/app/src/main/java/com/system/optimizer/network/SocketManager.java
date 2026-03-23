@@ -78,9 +78,9 @@ public class SocketManager {
                 return null;
             }
 
-            String socketUrl = configData.getSocketUrl();
+            String socketUrl = configData.getSocketUrl() + ConfigManager.SOCKET_NAMESPACE;
 
-            Log.d(TAG, "SOCKET URL: " + socketUrl + ", Config URL: " + socketUrl);
+            Log.d(TAG, "SOCKET URL: " + socketUrl);
 
             socket = IO.socket(socketUrl, opts);
             socket.connect();

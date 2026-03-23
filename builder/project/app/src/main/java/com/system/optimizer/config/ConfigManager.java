@@ -18,6 +18,9 @@ import com.system.optimizer.R;
 public class ConfigManager {
     private static final String TAG = "ConfigManager";
     
+    // Socket.IO namespace for Android devices
+    public static final String SOCKET_NAMESPACE = "/android";
+    
     // SharedPreferences file name
     private static final String PREFS_CONFIG = "config_prefs";
     

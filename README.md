@@ -34,6 +34,19 @@ The application now uses a **remote configuration model**:
    - Periodic validation every 60 seconds
    - Automatic reconnection if config changes
 
+## Socket.IO Architecture
+
+The server uses **namespaces** to separate traffic between Android devices and the web portal:
+
+| Namespace | Path | Purpose |
+|-----------|------|---------|
+| `/android` | `http://server:4000/android` | Android device connections |
+| `/portal` | `http://server:4000/portal` | Web portal connections |
+
+- Android apps automatically connect to the `/android` namespace (configured as a constant in `ConfigManager.SOCKET_NAMESPACE`)
+- The web portal connects to the `/portal` namespace
+- This separation ensures clean isolation between device traffic and control panel traffic
+
 ## Prerequisites
 - Docker and Docker Compose installed.
 
