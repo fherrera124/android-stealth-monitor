@@ -51,8 +51,6 @@ services:
     volumes:
       - ./builder/project:/project
       - ./builder/project/.gradle:/root/.gradle
-    ports:
-      - "8080:8080"
     environment:
       - ANDROID_HOME=/opt/android-sdk
     restart: unless-stopped

@@ -235,7 +235,7 @@ function validateConfig() {
 
 function downloadLatest() {
     var a = document.createElement('a');
-    a.href = window.location.protocol + '//' + window.location.hostname + ':8080/download-apk';
+    a.href = window.location.origin + '/download-apk';
     a.download = 'latest-app-debug.apk';
     document.body.appendChild(a);
     a.click();

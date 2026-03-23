@@ -6,6 +6,7 @@ import chalk from "chalk";
 import path from 'path';
 import { io as Client } from "socket.io-client";
 import { promises as fs } from "fs";
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
 const frontendPort = 4001;
 const serverUrl = process.env.SERVER_URL || "http://server:4000";
@@ -56,6 +57,16 @@ app.use(bodyParser.urlencoded({ extended: true }))
 app.use(express.json())
 app.use(express.static('static'))
 app.use('/screenshots', express.static('screenshots', { maxAge: '1h' }))
+
+// Proxy APK download requests to builder service
+const builderProxy = createProxyMiddleware({
+    target: 'http://android-builder:8080',
+    changeOrigin: true,
+    pathRewrite: {
+        '^/download-apk': '/download-apk',
+    },
+});
+app.use('/download-apk', builderProxy);
 
 // Serve main HTML file at root
 app.get('/', (req, res) => {
