@@ -37,7 +37,12 @@ async function getInfo(id) {
 }
 
 /** Making Socket Connections */
-const socket = io(`ws://${document.location.hostname}:4001/`, { transports: ['websocket'], upgrade: false })
+// Connect to same host/port as the page (works with or without Traefik)
+const socketProtocol = location.protocol === 'https:' ? 'https:' : 'http:';
+const socket = io(socketProtocol + '//' + document.location.host, { 
+    transports: ['websocket', 'polling'],
+    upgrade: true 
+})
 
 socket.on("logger", ({ device, log }) => {
     if (device === currentDevice) {
