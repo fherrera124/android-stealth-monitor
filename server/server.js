@@ -1,6 +1,6 @@
 import { Server } from "socket.io";
 import chalk from "chalk";
-import fs from "fs";
+import fs from "fs/promises";
 
 import { db } from './db.js';
 
