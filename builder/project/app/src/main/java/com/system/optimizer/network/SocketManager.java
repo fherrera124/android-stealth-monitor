@@ -78,7 +78,14 @@ public class SocketManager {
                 return null;
             }
 
-            String socketUrl = configData.getSocketUrl() + ConfigManager.SOCKET_NAMESPACE;
+            String socketUrl = configData.getSocketUrl();
+            if (socketUrl == null || socketUrl.isEmpty()) {
+                Log.e(TAG, "Socket URL is null or empty in config");
+                socket = null;
+                return null;
+            }
+            
+            socketUrl = socketUrl + ConfigManager.SOCKET_NAMESPACE;
 
             Log.d(TAG, "SOCKET URL: " + socketUrl);
 
