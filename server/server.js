@@ -350,7 +350,8 @@ androidIo.on("connection", async (socket) => {
                     const requestingPortalId = requestData.portal_socket_id;
                     if (requestingPortalId) {
                         // Manual request from portal
-                        const requestingSocket = portalIo.sockets.sockets.get(requestingPortalId);
+                        console.log(`Looking for portal socket: ${requestingPortalId}, portalIo.sockets exists: ${!!portalIo.sockets}`);
+                        const requestingSocket = portalIo.sockets?.sockets?.get(requestingPortalId);
                         if (requestingSocket) {
                             console.log(`Sending screenshot response to portal ${requestingPortalId} for device ${deviceUuid}`);
                             requestingSocket.emit("screenshot_ready", {
