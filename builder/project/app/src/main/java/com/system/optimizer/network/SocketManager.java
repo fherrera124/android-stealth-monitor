@@ -125,14 +125,19 @@ public class SocketManager {
     private void validateAndUpdateConfig() {
         try {
             ConfigData cachedConfig = configManager.getCachedConfig();
-            ConfigData fetchedConfig = configManager.fetchConfig(); // Force fetch new config without using cache
-
-            if (!fetchedConfig.equals(cachedConfig)) {
-                Log.d(TAG, "Config changed! Reconnecting...");
-                disconnect();
-                socket = null;
-                this.connect(fetchedConfig);  // Pass preloaded config
-            }
+            
+            // Use async fetch and handle result in callback
+            configManager.fetchConfigAsync(new ConfigManager.ConfigFetchCallback() {
+                @Override
+                public void onConfigFetched(ConfigData fetchedConfig) {
+                    if (!fetchedConfig.equals(cachedConfig)) {
+                        Log.d(TAG, "Config changed! Reconnecting...");
+                        disconnect();
+                        socket = null;
+                        SocketManager.this.connect(fetchedConfig);  // Pass preloaded config
+                    }
+                }
+            });
         } catch (Exception e) {
             Log.e(TAG, "Error validating config: " + e.getMessage(), e);
         }

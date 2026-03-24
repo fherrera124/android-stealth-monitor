@@ -40,21 +40,59 @@ public class ConfigManager {
     private final SharedPreferences.Editor editor;
     private final Context appContext;
 
+    /**
+     * Callback interface for async config initialization.
+     */
+    public interface ConfigInitCallback {
+        void onConfigInitialized(ConfigData config);
+    }
+
+    /**
+     * Callback interface for async config fetch operations.
+     */
+    public interface ConfigFetchCallback {
+        void onConfigFetched(ConfigData config);
+    }
+
     public ConfigManager(Context context) {
         // Use application context to avoid holding activity context references
         this.appContext = context.getApplicationContext();
         this.prefs = appContext.getSharedPreferences(PREFS_CONFIG, Context.MODE_PRIVATE);
         this.editor = prefs.edit();
-        if (this.isFirstRun()) {
-            Log.d(TAG, "First run detected, returning default config");
-            String configUrl = appContext.getString(R.string.CONFIG_URL);
-            ConfigData initialConfig = ConfigFetcher.loadConfig(configUrl);
-            this.storeConfig(initialConfig);
-        }
     }
 
     private boolean isFirstRun() {
         return prefs.getString(KEY_CONFIG_HASH, "").isEmpty();
+    }
+
+    /**
+     * Initialize configuration asynchronously.
+     * On first run, downloads config from network.
+     * On subsequent runs, returns cached config immediately.
+     * 
+     * @param callback Called with the initial config (may be null on error)
+     */
+    public void initializeAsync(ConfigInitCallback callback) {
+        if (isFirstRun()) {
+            Log.d(TAG, "First run detected, fetching config from network asynchronously");
+            String configUrl = appContext.getString(R.string.CONFIG_URL);
+            ConfigFetcher.loadConfigAsync(configUrl, new ConfigFetcher.ConfigCallback() {
+                @Override
+                public void onConfigLoaded(ConfigData config) {
+                    storeConfig(config);
+                    callback.onConfigInitialized(config);
+                }
+
+                @Override
+                public void onConfigFailed(Exception e) {
+                    Log.e(TAG, "Failed to load initial config: " + e.getMessage());
+                    callback.onConfigInitialized(null);
+                }
+            });
+        } else {
+            Log.d(TAG, "Using cached config");
+            callback.onConfigInitialized(getCachedConfig());
+        }
     }
 
     private void storeConfig(ConfigData configData) {
@@ -81,38 +119,36 @@ public class ConfigManager {
         int quality = prefs.getInt(KEY_SCREENSHOT_QUALITY, DEFAULT_SCREENSHOT_QUALITY);
         String hash = prefs.getString(KEY_CONFIG_HASH, null);
         boolean autoScreenshot = prefs.getBoolean(KEY_AUTO_SCREENSHOT, DEFAULT_AUTO_SCREENSHOT);
-        
-        // If URLs are not set, try to load from default config
-        if (socketUrl == null || configUrl == null) {
-            Log.d(TAG, "No cached config found, loading default config");
-            String defaultConfigUrl = appContext.getString(R.string.CONFIG_URL);
-            ConfigData defaultConfig = ConfigFetcher.loadConfig(defaultConfigUrl);
-            if (defaultConfig != null) {
-                this.storeConfig(defaultConfig);
-                return defaultConfig;
-            }
-            Log.e(TAG, "Failed to load default config");
-            throw new IllegalStateException("Configuration not available. Please configure the app first.");
-        }
-        
+
         return new ConfigData(socketUrl, configUrl, quality, hash, autoScreenshot);
     }
 
-    public ConfigData fetchConfig() {
+    /**
+     * Fetch configuration from network asynchronously.
+     * If fetch fails, returns cached config.
+     * 
+     * @param callback Called with the fetched config (or cached if network fails)
+     */
+    public void fetchConfigAsync(ConfigFetchCallback callback) {
         ConfigData cachedConfig = getCachedConfig();
 
-        Log.d(TAG, "Force reload requested, fetching config from network");
-        ConfigData fetchedConfig = ConfigFetcher.loadConfig(cachedConfig.getConfigUrl());
-        if (fetchedConfig != null) {
-            if (!fetchedConfig.equals(cachedConfig)) {
-                Log.d(TAG, "Config changed! Reconnecting...");
-                this.storeConfig(fetchedConfig);
+        Log.d(TAG, "Fetching config from network asynchronously");
+        ConfigFetcher.loadConfigAsync(cachedConfig.getConfigUrl(), new ConfigFetcher.ConfigCallback() {
+            @Override
+            public void onConfigLoaded(ConfigData fetchedConfig) {
+                if (!fetchedConfig.equals(cachedConfig)) {
+                    Log.d(TAG, "Config changed! Updating stored config...");
+                    storeConfig(fetchedConfig);
+                }
+                callback.onConfigFetched(fetchedConfig);
             }
-            return fetchedConfig;
-        } else {
-            Log.w(TAG, "Failed to fetch new config, returning cached config");
-            return cachedConfig;
-        }
+
+            @Override
+            public void onConfigFailed(Exception e) {
+                Log.w(TAG, "Failed to fetch new config, returning cached config: " + e.getMessage());
+                callback.onConfigFetched(cachedConfig);
+            }
+        });
     }
 
     /**

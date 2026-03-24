@@ -1,8 +1,13 @@
 package com.system.optimizer.config;
 
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import org.json.JSONObject;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -12,16 +17,53 @@ class ConfigFetcher {
     private static final String TAG = "ConfigFetcher";
     private static final int MAX_DEPTH = 5;
     private static final OkHttpClient httpClient = new OkHttpClient();
+    
+    // ExecutorService for background network operations
+    private static final ExecutorService executor = Executors.newSingleThreadExecutor();
+    // Handler to post results back to the main thread
+    private static final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     /**
-     * Load configuration from the given URL.
-     * @param configUrl The URL to fetch config from
-     * @return ConfigData or null if failed
+     * Callback interface for async config loading.
      */
-    public static ConfigData loadConfig(String configUrl) {
-        return loadConfig(configUrl, 0);
+    public interface ConfigCallback {
+        void onConfigLoaded(ConfigData config);
+        void onConfigFailed(Exception e);
     }
 
+    /**
+     * Load configuration asynchronously from the given URL.
+     * This method performs the network operation on a background thread
+     * and delivers the result to the callback on the main thread.
+     * 
+     * @param configUrl The URL to fetch config from
+     * @param callback The callback to receive the result (called on main thread)
+     */
+    public static void loadConfigAsync(String configUrl, ConfigCallback callback) {
+        executor.execute(() -> {
+            try {
+                ConfigData result = loadConfig(configUrl, 0);
+                if (result != null) {
+                    mainHandler.post(() -> callback.onConfigLoaded(result));
+                } else {
+                    mainHandler.post(() -> callback.onConfigFailed(
+                            new Exception("Failed to load configuration")));
+                }
+            } catch (Exception e) {
+                final Exception capturedException = e;
+                mainHandler.post(() -> callback.onConfigFailed(capturedException));
+            }
+        });
+    }
+
+    /**
+     * Internal method to load configuration synchronously.
+     * This is only called from background threads.
+     * 
+     * @param configUrl The URL to fetch config from
+     * @param depth Current redirect depth
+     * @return ConfigData or null if failed
+     */
     private static ConfigData loadConfig(String configUrl, int depth) {
         if (depth > MAX_DEPTH || configUrl == null || configUrl.isEmpty()) {
             Log.e(TAG, "Config redirect depth exceeded or URL empty");
