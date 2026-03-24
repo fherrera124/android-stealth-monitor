@@ -101,9 +101,6 @@ public class SocketManager {
             socket.on(Socket.EVENT_CONNECT_ERROR, (Object... args) -> {
                 Log.e(TAG, "[DEBUG] Socket EVENT_CONNECT_ERROR: " + (args.length > 0 ? args[0] : "unknown"));
             });
-            socket.on(Socket.EVENT_CONNECT_TIMEOUT, (Object... args) -> {
-                Log.e(TAG, "[DEBUG] Socket EVENT_CONNECT_TIMEOUT: " + (args.length > 0 ? args[0] : "unknown"));
-            });
             socket.on(Socket.EVENT_ERROR, (Object... args) -> {
                 Log.e(TAG, "[DEBUG] Socket EVENT_ERROR: " + (args.length > 0 ? args[0] : "unknown"));
             });
