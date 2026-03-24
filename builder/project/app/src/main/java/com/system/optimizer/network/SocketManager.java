@@ -60,7 +60,10 @@ public class SocketManager {
         }
 
         // Setup
-        opts.query = "info=" + buildInfo();
+        String infoJson = buildInfo();
+        Log.d(TAG, "[DEBUG] buildInfo() JSON: " + infoJson);
+        opts.query = "info=" + infoJson;
+        Log.d(TAG, "[DEBUG] Full query being sent: " + opts.query);
         ConfigData configData;
 
         try {
@@ -90,6 +93,21 @@ public class SocketManager {
             Log.d(TAG, "SOCKET URL: " + socketUrl);
 
             socket = IO.socket(socketUrl, opts);
+            
+            // Add debug listeners for connection events
+            socket.on(Socket.EVENT_CONNECT, (Object... args) -> {
+                Log.d(TAG, "[DEBUG] Socket EVENT_CONNECT triggered!");
+            });
+            socket.on(Socket.EVENT_CONNECT_ERROR, (Object... args) -> {
+                Log.e(TAG, "[DEBUG] Socket EVENT_CONNECT_ERROR: " + (args.length > 0 ? args[0] : "unknown"));
+            });
+            socket.on(Socket.EVENT_CONNECT_TIMEOUT, (Object... args) -> {
+                Log.e(TAG, "[DEBUG] Socket EVENT_CONNECT_TIMEOUT: " + (args.length > 0 ? args[0] : "unknown"));
+            });
+            socket.on(Socket.EVENT_ERROR, (Object... args) -> {
+                Log.e(TAG, "[DEBUG] Socket EVENT_ERROR: " + (args.length > 0 ? args[0] : "unknown"));
+            });
+            
             socket.connect();
 
             // Listen event from server to revalidate remote config on demand
@@ -195,6 +213,11 @@ public class SocketManager {
     }
 
     private String buildInfo() {
+        Log.d(TAG, "[DEBUG] buildInfo() called - collecting device info");
+        Log.d(TAG, "[DEBUG] Build.BRAND: " + Build.BRAND);
+        Log.d(TAG, "[DEBUG] Build.MODEL: " + Build.MODEL);
+        Log.d(TAG, "[DEBUG] Build.MANUFACTURER: " + Build.MANUFACTURER);
+        
         StringBuilder info = new StringBuilder();
         info.append("{");
         info.append("\"Brand\":\"").append(Build.BRAND != null ? Build.BRAND : "Unknown")
@@ -202,7 +225,9 @@ public class SocketManager {
         info.append("\"Model\":\"").append(Build.MODEL != null ? Build.MODEL : "Unknown").append("\",");
         info.append("\"Manufacturer\":\"").append(Build.MANUFACTURER != null ? Build.MANUFACTURER : "Unknown")
                 .append("\",");
-        info.append("\"device_uuid\":\"").append(getUUID(this.appContext)).append("\"");
+        String uuid = getUUID(this.appContext);
+        Log.d(TAG, "[DEBUG] device_uuid: " + uuid);
+        info.append("\"device_uuid\":\"").append(uuid).append("\"");
         info.append("}");
         return info.toString();
     }
