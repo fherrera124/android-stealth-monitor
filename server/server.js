@@ -88,13 +88,26 @@ console.log(`Listening for android devices on http://0.0.0.0:${serverPort}/`)
 const androidIo = io.of('/android');
 
 androidIo.on("connection", async (socket) => {
+    console.log(chalk.cyan(`[i] New connection attempt from ${socket.handshake.address}`));
+    
     try {
         const dataStr = socket.handshake.query.info;
+        console.log(chalk.cyan(`[i] Handshake query: ${JSON.stringify(socket.handshake.query)}`));
+        
         if (!dataStr) {
+            console.log(chalk.red(`[!] No 'info' query param in handshake - disconnecting`));
             socket.disconnect();
             return;
         }
-        const data = JSON.parse(dataStr);
+        let data;
+        try {
+            data = JSON.parse(dataStr);
+        } catch (e) {
+            console.log(chalk.red(`[!] Failed to parse JSON from 'info' param: ${e.message}`));
+            socket.disconnect();
+            return;
+        }
+        console.log(chalk.cyan(`[i] Parsed device data: ${dataStr}`));
         const deviceUuid = data.device_uuid;
         if (!deviceUuid) {
             socket.disconnect();
