@@ -628,9 +628,9 @@ frontendIo.on("connection", async (socket) => {
         frontendIo.emit("build_started", { configUrl });
 
         // Ejecutar build localmente
-        const command = `cd ./android-project && ./gradlew assembleDebug -PconfigUrl='${configUrl}' --no-daemon --stacktrace`;
+        const command = `cd /android-project && ./gradlew assembleDebug -PconfigUrl='${configUrl}' --no-daemon --stacktrace`;
         
-        exec(command, { cwd: './android-project' }, (error, stdout, stderr) => {
+        exec(command, { cwd: '/android-project' }, (error, stdout, stderr) => {
             if (error) {
                 console.error(`Build error: ${error.message}`);
                 console.error(`Stderr: ${stderr}`);
@@ -643,7 +643,7 @@ frontendIo.on("connection", async (socket) => {
     });
 
     socket.on("download_apk", async () => {
-        const apkPath = './android-project/app/build/outputs/apk/debug/app-debug.apk';
+        const apkPath = '/android-project/app/build/outputs/apk/debug/app-debug.apk';
         
         try {
             const buffer = await fs.readFile(apkPath);
