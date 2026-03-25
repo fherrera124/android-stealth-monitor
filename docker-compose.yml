@@ -24,7 +24,7 @@ services:
       - "traefik.http.routers.android-server.tls=true"
       - "traefik.http.services.android-server.loadbalancer.server.port=4000"
 
-  android-nginx:
+  android-portal:
     build:
       context: ./nginx
       dockerfile: Dockerfile
@@ -40,8 +40,8 @@ services:
       - proxy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.android-nginx.tls=true"
-      - "traefik.http.services.android-nginx.loadbalancer.server.port=4001"
+      - "traefik.http.routers.android-portal.tls=true"
+      - "traefik.http.services.android-portal.loadbalancer.server.port=4001"
 
 volumes:
   screenshots:
