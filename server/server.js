@@ -295,6 +295,7 @@ androidIo.on("connection", async (socket) => {
 
             try {
                 let buffer;
+                let formatDetected = 'unknown';
                 
                 // Handle different data formats from Android
                 // Try binary first, then fallback to base64
@@ -302,18 +303,22 @@ androidIo.on("connection", async (socket) => {
                 // 1. Try Buffer (already decoded)
                 if (Buffer.isBuffer(data)) {
                     buffer = data;
+                    formatDetected = 'Buffer';
                 }
                 // 2. Try TypedArray like Uint8Array
                 else if (ArrayBuffer.isView(data)) {
                     buffer = Buffer.from(data);
+                    formatDetected = 'TypedArray';
                 }
                 // 3. Try raw ArrayBuffer
                 else if (data instanceof ArrayBuffer) {
                     buffer = Buffer.from(new Uint8Array(data));
+                    formatDetected = 'ArrayBuffer';
                 }
                 // 4. Try Java array serialized as regular array
                 else if (data && typeof data === 'object' && Array.isArray(data)) {
                     buffer = Buffer.from(data);
+                    formatDetected = 'JavaArray';
                 }
                 // 5. Fallback: try as base64 string
                 else if (typeof data === 'string') {
@@ -322,9 +327,12 @@ androidIo.on("connection", async (socket) => {
                         throw new Error('Invalid screenshot data: appears to be logger message');
                     }
                     buffer = Buffer.from(data, 'base64');
+                    formatDetected = 'Base64';
                 } else {
                     throw new Error('Invalid image data: unknown format, got ' + typeof data);
                 }
+                
+                console.log(chalk.blue(`[i] Screenshot format detected: ${formatDetected}, size: ${buffer.length} bytes`));
                 
                 if (buffer.length === 0) {
                     throw new Error('Empty image data');
