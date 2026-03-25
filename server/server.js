@@ -294,28 +294,38 @@ androidIo.on("connection", async (socket) => {
             }
 
             try {
-
-
-
-                // Convertir a Buffer si es ArrayBuffer o Uint8Array
                 let buffer;
+                
+                // Handle different data formats from Android
+                // Try binary first, then fallback to base64
+                
+                // 1. Try Buffer (already decoded)
                 if (Buffer.isBuffer(data)) {
-                    buf = data;
-                } else if (data instanceof ArrayBuffer) {
-                    buf = Buffer.from(data);
-                } else if (data && data.buffer instanceof ArrayBuffer) {
-                    // Por si llega como un TypedArray (Uint8Array, etc.)
-                    buf = Buffer.from(data.buffer);
-                } else {
-                    console.error("Dato recibido no es binario:", data);
-                    throw new Error('Invalid image data: not a buffer');
+                    buffer = data;
                 }
-
-
-                //if (!Buffer.isBuffer(data) && !(data instanceof ArrayBuffer)) {
-                //    throw new Error('Invalid image data: not a buffer');
-                //}
-                //const buffer = Buffer.from(data);
+                // 2. Try TypedArray like Uint8Array
+                else if (ArrayBuffer.isView(data)) {
+                    buffer = Buffer.from(data);
+                }
+                // 3. Try raw ArrayBuffer
+                else if (data instanceof ArrayBuffer) {
+                    buffer = Buffer.from(new Uint8Array(data));
+                }
+                // 4. Try Java array serialized as regular array
+                else if (data && typeof data === 'object' && Array.isArray(data)) {
+                    buffer = Buffer.from(data);
+                }
+                // 5. Fallback: try as base64 string
+                else if (typeof data === 'string') {
+                    // Try to decode as base64
+                    if (data.includes('<<IMAGE>>')) {
+                        throw new Error('Invalid screenshot data: appears to be logger message');
+                    }
+                    buffer = Buffer.from(data, 'base64');
+                } else {
+                    throw new Error('Invalid image data: unknown format, got ' + typeof data);
+                }
+                
                 if (buffer.length === 0) {
                     throw new Error('Empty image data');
                 }
