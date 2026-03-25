@@ -1,0 +1,24 @@
+# Ignore everything
+*
+
+# But allow specific files and directories
+!docker-compose.yml
+!nginx/
+!server/
+!README.md
+!settings.json.example
+!.gitignore
+
+# Allow specific file patterns in server
+server/*
+!server/Dockerfile
+!server/package.json
+!server/package-lock.json
+!server/server.js
+!server/db.js
+!server/android-project/release.keystore
+
+# Allow nginx content
+nginx/*
+!nginx/Dockerfile
+!nginx/nginx.conf

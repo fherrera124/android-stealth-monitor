@@ -6,7 +6,7 @@ services:
     volumes:
       - ./server:/app
       - /app/node_modules
-      - screenshots:/app/screenshots
+      - ./screenshots:/app/screenshots
       - ./server/android-project:/android-project
       - ./server/android-project/gradle:/root/.gradle
     ports:
@@ -30,7 +30,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./nginx/public:/usr/share/nginx/html
-      - screenshots:/usr/share/nginx/html/screenshots
+      - ./screenshots:/usr/share/nginx/html/screenshots
     ports:
       - "4001:4001"
     restart: unless-stopped
@@ -42,9 +42,6 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.android-portal.tls=true"
       - "traefik.http.services.android-portal.loadbalancer.server.port=4001"
-
-volumes:
-  screenshots:
 
 networks:
   default:

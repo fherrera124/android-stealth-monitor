@@ -8,8 +8,8 @@ build/
 *.aar
 *.arr
 local.properties
-builder/project/app/build/
-builder/project/app/src/main/res/values/strings.xml
+server/android-project/app/build/
+server/android-project/app/src/main/res/values/strings.xml
 
 # IDE
 .idea/
@@ -27,3 +27,6 @@ Thumbs.db
 # Logs
 *.log
 server/devices.db
+
+# Screenshots (carpeta local)
+screenshots/*
