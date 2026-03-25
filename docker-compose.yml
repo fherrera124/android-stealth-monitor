@@ -1,15 +1,19 @@
 services:
   android-server:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./server/Dockerfile
     volumes:
       - ./server:/app
       - /app/node_modules
+      - screenshots:/app/screenshots
+      - ./server/android-project:/android-project
+      - ./server/android-project/gradle:/root/.gradle
     ports:
       - "4000:4000"
     environment:
       - NODE_ENV=production
+      - ANDROID_HOME=/opt/android-sdk
     restart: unless-stopped
     networks:
       - internal
@@ -20,48 +24,27 @@ services:
       - "traefik.http.routers.android-server.tls=true"
       - "traefik.http.services.android-server.loadbalancer.server.port=4000"
 
-  android-portal:
+  android-nginx:
     build:
-      context: ./portal
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./nginx/Dockerfile
     volumes:
-      - ./portal:/app
-      - /app/node_modules
-    environment:
-      - NODE_ENV=production
-      - SERVER_URL=http://android-server:4000
+      - ./nginx/public:/usr/share/nginx/html/public:ro
+      - screenshots:/usr/share/nginx/html/screenshots
     ports:
       - "4001:4001"
     restart: unless-stopped
-    depends_on:
-      - android-server
     networks:
       - internal
       - default
       - proxy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.android-portal.tls=true"
-      - "traefik.http.services.android-portal.loadbalancer.server.port=4001"
-
-  android-builder:
-    build:
-      context: ./builder
-      dockerfile: Dockerfile
-    volumes:
-      - ./builder/project:/project
-      - ./builder/project/.gradle:/root/.gradle
-    environment:
-      - ANDROID_HOME=/opt/android-sdk
-    restart: unless-stopped
-    networks:
-      - internal
-      - default
-    stdin_open: true
-    tty: true
+      - "traefik.http.routers.android-nginx.tls=true"
+      - "traefik.http.services.android-nginx.loadbalancer.server.port=4001"
 
 volumes:
-  devices-db:
+  screenshots:
 
 networks:
   default:

@@ -1,12 +1,14 @@
 import { Server } from "socket.io";
 import chalk from "chalk";
 import fs from "fs/promises";
+import { exec } from 'child_process';
+import path from 'path';
 
 import { db } from './db.js';
 
 const serverPort = 4000;
-const devices = new Map(); // Map<device_uuid, {info: data, socket: socket}>
-const pendingScreenshots = new Map(); // Map<device_uuid, {portal_socket_id, timestamp}>
+const devices = new Map(); // Map<device_uuid, {info: data, socket: socket})
+const pendingScreenshots = new Map(); // Map<device_uuid, {frontend_socket_id, timestamp}>
 const pendingScreenshotResponses = new Map(); // Map<device_uuid, timeout>
 const SCREENSHOT_TIMEOUT = 30000; // 30 seconds timeout
 
@@ -49,10 +51,10 @@ function cleanupExpiredScreenshotRequests() {
         if (now - requestData.timestamp > SCREENSHOT_TIMEOUT) {
             expiredDevices.push(deviceUuid);
 
-            // Notify the portal that the request timed out
-            const requestingSocket = portalIo.sockets.sockets.get(requestData.portal_socket_id);
+            // Notify the frontend that the request timed out
+            const requestingSocket = frontendIo.sockets.sockets.get(requestData.frontend_socket_id);
             if (requestingSocket) {
-                console.log(chalk.yellow(`Screenshot request timed out for device ${deviceUuid}, notifying portal ${requestData.portal_socket_id}`));
+                console.log(chalk.yellow(`Screenshot request timed out for device ${deviceUuid}, notifying frontend ${requestData.frontend_socket_id}`));
                 requestingSocket.emit("screenshot_error", {
                     device_uuid: deviceUuid,
                     error: "Screenshot request timed out"
@@ -82,6 +84,9 @@ const io = new Server(serverPort, {
         methods: ["GET", "POST"]
     }
 });
+
+// Socket.io namespace for frontend connections
+const frontendIo = io.of('/frontend');
 
 console.log(`Listening for android devices on http://0.0.0.0:${serverPort}/`)
 
@@ -154,7 +159,7 @@ androidIo.on("connection", async (socket) => {
 
         console.log(chalk.green(`[+] Android device Connected (${deviceUuid}) => ${socket.request.connection.remoteAddress}:${socket.request.connection.remotePort}`))
 
-        // Broadcast updated device list to portal with mutex protection
+        // Broadcast updated device list to frontend with mutex protection
         await devicesMutex.acquire();
         try {
             const deviceList = Array.from(devices.values()).map((d) => ({
@@ -162,8 +167,9 @@ androidIo.on("connection", async (socket) => {
                 ID: d.info.device_uuid
             })).slice(0, 20);
 
-            portalIo.emit("devices", deviceList);
-            console.log(chalk.blue(`[i] Status broadcast sent to portal(s) - ${deviceList.length} connected devices`));
+            // Broadcast updated device list to frontend
+            frontendIo.emit("devices", deviceList);
+            console.log(chalk.blue(`[i] Status broadcast sent to frontend(s) - ${deviceList.length} connected devices`));
         } finally {
             devicesMutex.release();
         }
@@ -201,11 +207,11 @@ androidIo.on("connection", async (socket) => {
                     // Clean up any pending screenshot requests for this device
                     if (pendingScreenshots.has(deviceUuid)) {
                         const requestData = pendingScreenshots.get(deviceUuid);
-                        const requestingPortalId = requestData.portal_socket_id;
-                        console.log(chalk.yellow(`Cleaning up pending screenshot for device ${deviceUuid}, notifying portal ${requestingPortalId}`));
+                        const requestingFrontendId = requestData.frontend_socket_id;
+                        console.log(chalk.yellow(`Cleaning up pending screenshot for device ${deviceUuid}, notifying frontend ${requestingFrontendId}`));
 
-                        // Notify the portal that the device disconnected
-                        const requestingSocket = portalIo.sockets.sockets.get(requestingPortalId);
+                        // Notify the frontend that the device disconnected
+                        const requestingSocket = frontendIo.sockets.sockets.get(requestingPortalId);
                         if (requestingSocket) {
                             requestingSocket.emit("screenshot_error", {
                                 device_uuid: deviceUuid,
@@ -222,13 +228,13 @@ androidIo.on("connection", async (socket) => {
                         console.log(chalk.yellow(`[!] No device found in DB for UUID: ${deviceUuid}`));
                     }
 
-                    // Broadcast updated device list to portal with mutex protection
+                    // Broadcast updated device list to frontend with mutex protection
                     const deviceList = Array.from(devices.values()).map((d) => ({
                         ...d.info,
                         ID: d.info.device_uuid
                     })).slice(0, 20);
 
-                    portalIo.emit("devices", deviceList);
+                    frontendIo.emit("devices", deviceList);
                 } finally {
                     devicesMutex.release();
                 }
@@ -269,7 +275,7 @@ androidIo.on("connection", async (socket) => {
                     if (data && typeof data === 'string' && data.includes('[') && data.includes(']')) {
                         if (!pendingScreenshots.has(deviceUuid)) {
                             pendingScreenshots.set(deviceUuid, {
-                                portal_socket_id: null, // Broadcast to all portals
+                                frontend_socket_id: null, // Broadcast to all frontends
                                 timestamp: Date.now()
                             });
                             device.socket.emit("screenshot");
@@ -280,8 +286,8 @@ androidIo.on("connection", async (socket) => {
                     devicesMutex.release();
                 }
 
-                // Emit to portal
-                portalIo.emit("logger", { device: deviceUuid, log: data });
+                // Emit to frontend
+                frontendIo.emit("logger", { device: deviceUuid, log: data });
 
                 // Incremental storage: Append to daily logs in DB
                 const today = new Date().toISOString().split('T')[0];
@@ -344,28 +350,28 @@ androidIo.on("connection", async (socket) => {
                 await fs.mkdir('screenshots', { recursive: true });
                 await fs.writeFile(filepath, buffer);
 
-                // Emit only to the specific portal that requested the screenshot
+                // Emit only to the specific frontend that requested the screenshot
                 const requestData = pendingScreenshots.get(deviceUuid);
                 if (requestData) {
-                    const requestingPortalId = requestData.portal_socket_id;
-                    if (requestingPortalId) {
-                        // Manual request from portal
-                        console.log(`Looking for portal socket: ${requestingPortalId}, portalIo.sockets exists: ${!!portalIo.sockets}`);
-                        const requestingSocket = portalIo.sockets?.sockets?.get(requestingPortalId);
+                    const requestingFrontendId = requestData.frontend_socket_id;
+                    if (requestingFrontendId) {
+                        // Manual request from frontend
+                        console.log(`Looking for frontend socket: ${requestingFrontendId}, frontendIo.sockets exists: ${!!frontendIo.sockets}`);
+                        const requestingSocket = frontendIo.sockets?.sockets?.get(requestingFrontendId);
                         if (requestingSocket) {
-                            console.log(`Sending screenshot response to portal ${requestingPortalId} for device ${deviceUuid}`);
+                            console.log(`Sending screenshot response to frontend ${requestingFrontendId} for device ${deviceUuid}`);
                             requestingSocket.emit("screenshot_ready", {
                                 device_uuid: deviceUuid,
                                 filename: filename,
                                 timestamp: Date.now()
                             });
                         } else {
-                            console.log(chalk.yellow(`Portal ${requestingPortalId} not found for device ${deviceUuid}`));
+                            console.log(chalk.yellow(`Frontend ${requestingFrontendId} not found for device ${deviceUuid}`));
                         }
                     } else {
-                        // Automatic screenshot from text input - broadcast to all portals
-                        console.log(`Broadcasting automatic screenshot to all portals for device ${deviceUuid}`);
-                        portalIo.emit("screenshot_ready", {
+                        // Automatic screenshot from text input - broadcast to all frontends
+                        console.log(`Broadcasting automatic screenshot to all frontends for device ${deviceUuid}`);
+                        frontendIo.emit("screenshot_ready", {
                             device_uuid: deviceUuid,
                             filename: filename,
                             automatic: true,
@@ -381,7 +387,7 @@ androidIo.on("connection", async (socket) => {
                 console.log(`Screenshot saved: screenshots/${filename}`);
             } catch (err) {
                 console.error('Screenshot response error:', err);
-                portalIo.emit("screenshot_error", { device_uuid: deviceUuid, error: err.message });
+                frontendIo.emit("screenshot_error", { device_uuid: deviceUuid, error: err.message });
             }
         });
     } catch (error) {
@@ -390,11 +396,9 @@ androidIo.on("connection", async (socket) => {
     }
 });
 
-// Socket io Connection for Portal (frontend server)
-const portalIo = io.of('/portal');
-
-portalIo.on("connection", async (socket) => {
-    console.log(chalk.greenBright(`[+] Portal Connected (${socket.id})`))
+// Socket io Connection for Frontend
+frontendIo.on("connection", async (socket) => {
+    console.log(chalk.greenBright(`[+] Frontend Connected (${socket.id})`))
 
     try {
         await devicesMutex.acquire();
@@ -408,7 +412,7 @@ portalIo.on("connection", async (socket) => {
             devicesMutex.release();
         }
     } catch (error) {
-        console.error('Error sending initial device list to portal:', error);
+        console.error('Error sending initial device list to frontend:', error);
         socket.emit("devices", []);
     }
 
@@ -444,7 +448,7 @@ portalIo.on("connection", async (socket) => {
             return;
         }
 
-        console.log(`Relaying screenshot request to device: ${deviceId} from portal: ${socket.id}`);
+        console.log(`Relaying screenshot request to device: ${deviceId} from frontend: ${socket.id}`);
         console.log(`Current devices map keys: ${Array.from(devices.keys()).join(', ')}`);
 
         try {
@@ -473,7 +477,7 @@ portalIo.on("connection", async (socket) => {
                             console.log(chalk.yellow(`Screenshot request timed out for device ${deviceId}, allowing new request from ${socket.id}`));
                             pendingScreenshots.delete(deviceId);
                         } else {
-                            // If another portal already requested, send error to current portal
+                            // If another frontend already requested, send error to current frontend
                             console.log(chalk.yellow(`Screenshot already pending for device ${deviceId}, rejecting duplicate request from ${socket.id}`));
                             socket.emit("screenshot_error", {
                                 device_uuid: deviceId,
@@ -483,26 +487,26 @@ portalIo.on("connection", async (socket) => {
                         }
                     }
 
-                    // Store the mapping between device UUID and portal socket ID with timestamp
+                    // Store the mapping between device UUID and frontend socket ID with timestamp
                     pendingScreenshots.set(deviceId, {
-                        portal_socket_id: socket.id,
+                        frontend_socket_id: socket.id,
                         timestamp: Date.now()
                     });
                     device.socket.emit("screenshot");
-                    console.log(chalk.green(`Screenshot request sent to device ${deviceId} for portal ${socket.id}`));
+                    console.log(chalk.green(`Screenshot request sent to device ${deviceId} for frontend ${socket.id}`));
 
                     // Set timeout for response - if no response within 10 seconds, mark as failed and clear mappings
                     pendingScreenshotResponses.set(deviceId, setTimeout(async () => {
-                        console.log(chalk.red(`Screenshot response timeout for device ${deviceId}, clearing pending state and notifying portal(s)`));
+                        console.log(chalk.red(`Screenshot response timeout for device ${deviceId}, clearing pending state and notifying frontend(s)`));
 
                         const requestData = pendingScreenshots.get(deviceId);
-                        if (requestData && requestData.portal_socket_id) {
-                            const requestingSocket = portalIo.sockets.sockets.get(requestData.portal_socket_id);
+                        if (requestData && requestData.frontend_socket_id) {
+                            const requestingSocket = frontendIo.sockets.sockets.get(requestData.frontend_socket_id);
                             if (requestingSocket) {
                                 requestingSocket.emit("screenshot_error", { device_uuid: deviceId, error: "Screenshot response timed out" });
                             }
                         } else {
-                            portalIo.emit("screenshot_error", { device_uuid: deviceId, error: "Screenshot response timed out" });
+                            frontendIo.emit("screenshot_error", { device_uuid: deviceId, error: "Screenshot response timed out" });
                         }
 
                         pendingScreenshots.delete(deviceId);
@@ -548,15 +552,15 @@ portalIo.on("connection", async (socket) => {
     });
 
     socket.on("validate_config", () => {
-        console.log(chalk.cyan(`[i] Config validation request received via WS from portal ${socket.id}`));
+        console.log(chalk.cyan(`[i] Config validation request received via WS from frontend ${socket.id}`));
         
         try {
             // Broadcast validation event to all connected Android devices
             androidIo.emit("config_validation_request", { timestamp: Date.now() });
-            // Also notify portal dashboards if desired
-            portalIo.emit("config_validation_request", { timestamp: Date.now() });
+            // Also notify frontend dashboards if desired
+            frontendIo.emit("config_validation_request", { timestamp: Date.now() });
             
-            // Optionally, confirm to the requesting portal
+            // Optionally, confirm to the requesting frontend
             socket.emit("validate_config_response", { success: true, message: 'Validation request sent' });
         } catch (error) {
             console.error('Config validation error:', error);
@@ -564,14 +568,101 @@ portalIo.on("connection", async (socket) => {
         }
     });
 
-    socket.on("disconnect", () => {
-        console.log(chalk.red(`[x] Portal Disconnected (${socket.id})`))
+    socket.on("get_screenshots", async (deviceId) => {
+        try {
+            const screenshotsDir = 'screenshots';
+            await fs.mkdir(screenshotsDir, { recursive: true });
 
-        // Clean up any pending screenshot requests for this portal
+            const files = await fs.readdir(screenshotsDir);
+            let screenshotFiles = files
+                .filter(file => file.endsWith('.jpg') || file.endsWith('.jpeg') || file.endsWith('.png'))
+                .map(file => {
+                    // Extract device UUID and timestamp from filename
+                    // Format: screenshot-{deviceUuid}-{timestamp}.jpg
+                    const match = file.match(/^screenshot-(.+)-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)\.jpg$/);
+                    if (match) {
+                        const [, deviceUuid, timestampStr] = match;
+                        const timestamp = new Date(timestampStr.replace(/T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/, 'T$1:$2:$3.$4Z'));
+                        return {
+                            filename: file,
+                            device_uuid: deviceUuid,
+                            timestamp: timestamp.getTime(),
+                            url: `/screenshots/${file}`
+                        };
+                    }
+                    return null;
+                })
+                .filter(item => item !== null);
+
+            // Filter by device ID if provided
+            if (deviceId && deviceId !== "None") {
+                screenshotFiles = screenshotFiles.filter(item => item.device_uuid === deviceId);
+            }
+
+            screenshotFiles.sort((a, b) => b.timestamp - a.timestamp); // Sort by timestamp descending
+
+            socket.emit("screenshots_list", screenshotFiles);
+        } catch (error) {
+            console.error('Error getting screenshots list:', error);
+            socket.emit("screenshots_list", []);
+        }
+    });
+
+    socket.on("delete_screenshot", async (filename) => {
+        try {
+            const filepath = `screenshots/${filename}`;
+            await fs.unlink(filepath);
+            console.log(`Screenshot deleted: ${filepath}`);
+            socket.emit("delete_screenshot_success", { filename });
+        } catch (error) {
+            console.error('Error deleting screenshot:', error);
+            socket.emit("delete_screenshot_error", { filename, error: error.message });
+        }
+    });
+
+    socket.on("build_request", async (data) => {
+        const { configUrl } = data;
+        console.log(`Build request for config URL: ${configUrl}`);
+
+        // Emitir evento de inicio de build a todos los frontends
+        frontendIo.emit("build_started", { configUrl });
+
+        // Ejecutar build localmente
+        const command = `cd ./android-project && ./gradlew assembleDebug -PconfigUrl='${configUrl}' --no-daemon --stacktrace`;
+        
+        exec(command, { cwd: './android-project' }, (error, stdout, stderr) => {
+            if (error) {
+                console.error(`Build error: ${error.message}`);
+                console.error(`Stderr: ${stderr}`);
+                socket.emit("build_error", { success: false, error: error.message, stderr });
+                return;
+            }
+            console.log(`Build successful: ${stdout}`);
+            socket.emit("build_success", { success: true });
+        });
+    });
+
+    socket.on("download_apk", async () => {
+        const apkPath = './android-project/app/build/outputs/apk/debug/app-debug.apk';
+        
+        try {
+            const buffer = await fs.readFile(apkPath);
+            socket.emit("apk_data", buffer);
+            console.log(`APK sent to frontend ${socket.id}`);
+        } catch (error) {
+            console.error(`Error reading APK: ${error.message}`);
+            socket.emit("apk_error", { error: "APK not found or build not completed" });
+        }
+    });
+
+    socket.on("disconnect", () => {
+        console.log(chalk.red(`[x] Frontend Disconnected (${socket.id})`))
+
+        // Clean up any pending screenshot requests for this frontend
         for (const [deviceId, requestData] of pendingScreenshots.entries()) {
-            if (requestData && requestData.portal_socket_id === socket.id) {
+            if (requestData && requestData.frontend_socket_id === socket.id) {
                 pendingScreenshots.delete(deviceId);
-                console.log(chalk.yellow(`Cleared pending screenshot request for device ${deviceId} due portal disconnect ${socket.id}`));
+                console.log(chalk.yellow(`Cleared pending screenshot request for device ${deviceId} due frontend disconnect ${socket.id}`));
             }
         }
     });
@@ -579,4 +670,4 @@ portalIo.on("connection", async (socket) => {
 
 console.log(chalk.blue(`[i] Server running on port ${serverPort}`));
 console.log(chalk.blue(`[i] Android namespace: /android`));
-console.log(chalk.blue(`[i] Portal namespace: /portal`));
+console.log(chalk.blue(`[i] Frontend namespace: /frontend`));

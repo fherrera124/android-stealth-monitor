@@ -38,9 +38,8 @@ async function getInfo(id) {
 
 /** Making Socket Connections */
 // Socket.IO automatically uses wss: for https: and ws: for http:
-// Only add port if it's explicitly in the URL
-const socketPort = location.port ? ':' + location.port : '';
-const socket = io(location.protocol + '//' + location.hostname + socketPort, {
+// Connect to /frontend namespace via nginx proxy on port 4001
+const socket = io('/frontend', {
     transports: ['websocket'],
     upgrade: true
 })
@@ -137,7 +136,28 @@ socket.on("device_info_error", (data) => {
 
 socket.on("build_success", (data) => {
     hideBuildProgress();
-    showMsg('Build success');
+    showMsg('Build successful! Downloading APK...');
+    
+    // Request APK download via WebSocket
+    socket.emit("download_apk");
+});
+
+socket.on("apk_data", (buffer) => {
+    // Convertir el ArrayBuffer a Blob y descargar
+    const blob = new Blob([buffer], { type: 'application/vnd.android.package-archive' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'app-debug.apk';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showMsg('APK downloaded successfully!');
+});
+
+socket.on("apk_error", (data) => {
+    showMsg('Error downloading APK: ' + data.error);
 });
 
 socket.on("build_error", (data) => {
@@ -234,12 +254,8 @@ function validateConfig() {
 }
 
 function downloadLatest() {
-    var a = document.createElement('a');
-    a.href = window.location.origin + '/download-apk';
-    a.download = 'latest-app-debug.apk';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    // Solicitar APK via WebSocket
+    socket.emit("download_apk");
 }
 
 function showBuildProgress() {

@@ -1,13 +1,15 @@
-FROM node:18-alpine
+FROM thyrlian/android-sdk:latest
+
+# Install Node.js for the server
+RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY package*.json ./
+# Copy only package.json and install dependencies
+COPY server/package*.json ./
 
 RUN npm install && npm cache clean --force
 
-COPY . .
-
 EXPOSE 4000
 
-CMD ["npm", "start"]
+CMD ["node", "server.js"]
