@@ -59,7 +59,7 @@ socket.on("device_logs", (logs) => {
     }
 })
 
-socket.on("info", (data) => {
+socket.on("devices", (data) => {
     // console.log(data)
     devices.innerHTML = '<option data-display="Devices">None</option>'
     data.forEach(i => {
