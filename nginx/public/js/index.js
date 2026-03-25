@@ -45,6 +45,7 @@ const socket = io('/frontend', {
 })
 
 socket.on("logger", ({ device, log, image }) => {
+    console.log('Logger event received:', { device, currentDevice, log: log?.substring(0, 50), image });
     if (device === currentDevice) {
         // console.log(log)
         output.value += log.trim() + "\n";

