@@ -29,7 +29,7 @@ services:
       context: ./nginx
       dockerfile: Dockerfile
     volumes:
-      - ./nginx/public:/usr/share/nginx/html/public:ro
+      - ./nginx/public:/usr/share/nginx/html:ro
       - screenshots:/usr/share/nginx/html/screenshots
     ports:
       - "4001:4001"
