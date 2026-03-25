@@ -33,18 +33,20 @@ public class TextEventHandler {
 
         if (event == null || event.getText() == null)
             return;
-    
+
         if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
             String packageName = event.getPackageName() != null ? event.getPackageName().toString() : "";
 
-            if (!packageName.equals("com.android.systemui") &&
-                    !packageName.equals("android") &&
-                    !packageName.equals("com.google.android.inputmethod.latin")) {
+            // Ignore system UI and keyboard events
+            if (packageName.equals("com.android.systemui") ||
+                    packageName.equals("android") ||
+                    packageName.equals("com.google.android.inputmethod.latin")) {
+                return;
+            }
 
-                String text = normalizeTextEvent(event.getText());
-                if (!text.isEmpty()) {
-                    logger.onNewText(text);
-                }
+            String text = normalizeTextEvent(event.getText());
+            if (!text.isEmpty()) {
+                logger.onNewText(text);
             }
         }
     }

