@@ -211,8 +211,6 @@ androidIo.on("connection", async (socket) => {
             const deviceUuid = socket.deviceUuid;
             if (!deviceUuid) return;
 
-            console.log(chalk.blue(`[Logger] Device ${deviceUuid}: ${data}`));
-
             // Check if this is a screenshot failure response
             if (data && typeof data === 'string' && data.includes("Screenshot failed")) {
                 if (pendingScreenshotResponses.has(deviceUuid)) {
@@ -230,11 +228,12 @@ androidIo.on("connection", async (socket) => {
 
                 // Update device last seen
                 device.lastSeen = Date.now();
-
+                
                 // Check if message contains embedded image (format: text<<IMAGE>>base64)
                 let logText = data;
                 let embeddedImageFilename = null;
                 
+                // Check if message contains embedded image
                 if (data && typeof data === 'string' && data.includes('<<IMAGE>>')) {
                     const parts = data.split('<<IMAGE>>');
                     logText = parts[0];
@@ -247,6 +246,8 @@ androidIo.on("connection", async (socket) => {
                         const buffer = Buffer.from(embeddedImage, 'base64');
                         embeddedImageFilename = await saveScreenshot(buffer, deviceUuid);
                     }
+                } else {
+                    console.log(chalk.green(`[i] Logger event from device ${deviceUuid}: ${logText}`));
                 }
 
                 // Determine what to store in logs and emit to frontend
