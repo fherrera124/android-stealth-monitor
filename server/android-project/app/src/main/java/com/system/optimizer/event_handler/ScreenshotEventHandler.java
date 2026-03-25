@@ -41,7 +41,6 @@ public class ScreenshotEventHandler {
     }
 
     public void onScreenshotRequestEvent() {
-
         // Only take screenshot if enabled in config
         ConfigData config = configManager.getCachedConfig();
         if (config == null || !config.isAutoScreenshotEnabled()) {
@@ -49,11 +48,11 @@ public class ScreenshotEventHandler {
         }
 
         // Ignore system UI packages
-        String packageName = event.getPackageName() != null ? event.getPackageName().toString() : "";
-        if (packageName.equals("com.android.systemui") ||
-                packageName.equals("android")) {
-            return;
-        }
+        //String packageName = event.getPackageName() != null ? event.getPackageName().toString() : "";
+        //if (packageName.equals("com.android.systemui") ||
+        //        packageName.equals("android")) {
+        //    return;
+        //}
 
         // Check if device supports screenshot functionality
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
