@@ -26,8 +26,8 @@ services:
 
   android-nginx:
     build:
-      context: .
-      dockerfile: ./nginx/Dockerfile
+      context: ./nginx
+      dockerfile: Dockerfile
     volumes:
       - ./nginx/public:/usr/share/nginx/html/public:ro
       - screenshots:/usr/share/nginx/html/screenshots
