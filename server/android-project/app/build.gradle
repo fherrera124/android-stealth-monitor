@@ -24,7 +24,7 @@ android {
         }
         release {
             // Keystore fijo para versiones release
-            storeFile file("release.keystore")
+            storeFile file("../release.keystore")
             storePassword "android"
             keyAlias "releasekey"
             keyPassword "android"
