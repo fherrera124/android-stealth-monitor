@@ -1,8 +1,7 @@
 package com.system.optimizer;
 
-import com.system.optimizer.event_handler.SystemEventHandler;
-
-import com.system.optimizer.event_handler.ScreenshotEventHandler;
+import com.system.optimizer.handler.SystemEventHandler;
+import com.system.optimizer.handler.ScreenshotEventHandler;
 import com.system.optimizer.config.ConfigData;
 import com.system.optimizer.config.ConfigManager;
 import com.system.optimizer.network.SocketManager;
