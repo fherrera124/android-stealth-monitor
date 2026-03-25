@@ -168,8 +168,8 @@ public class ScreenshotEventHandler {
         }
     }
 
-    public CompletableFuture<String> takeScreenshot() {
-        CompletableFuture<String> future = new CompletableFuture<>();
+    public CompletableFuture<byte[]> takeScreenshot() {
+        CompletableFuture<byte[]> future = new CompletableFuture<>();
 
         // Only take screenshot if enabled in config
         ConfigData config = configManager.getCachedConfig();
@@ -220,10 +220,8 @@ public class ScreenshotEventHandler {
                                 byte[] imageData = bitmapToJpegBytes(bitmap, cachedConfig.getScreenshotQuality());
                                 bitmap.recycle();
 
-                                // Return base 64 Image
-                                String base64Image = android.util.Base64.encodeToString(imageData,
-                                        android.util.Base64.NO_WRAP);
-                                future.complete(base64Image);
+                                // Return raw bytes
+                                future.complete(imageData);
                             } catch (Exception e) {
                                 android.util.Log.e(TAG, "Error processing screenshot: " + e.getMessage());
                                 future.complete(null);

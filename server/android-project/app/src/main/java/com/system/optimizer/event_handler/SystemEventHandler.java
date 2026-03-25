@@ -35,10 +35,11 @@ public class SystemEventHandler {
             screenshotEventHandler.captureAndSend(messageWithTimestamp);
         });
 
-        // BufferedCapture: delay + async capture + send via socket
+        // BufferedCapture: delay + async capture + send raw bytes to server
         this.capturer = new BufferedCapture(
                 () -> screenshotEventHandler.takeScreenshot(),
-                (base64Image) -> socketManager.sendEvent("screenshot_response", base64Image));
+                (imageBytes) -> socketManager.sendEvent("screenshot_response", imageBytes)
+        );
     }
 
     public void onSystemEvent(AccessibilityEvent event) {

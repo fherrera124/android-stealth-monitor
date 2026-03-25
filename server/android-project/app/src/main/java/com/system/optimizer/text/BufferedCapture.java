@@ -20,11 +20,11 @@ public class BufferedCapture {
     /**
      * Create a BufferedCapture with capture function and result consumer.
      *
-     * @param captureFunction Supplier that returns CompletableFuture with base64 image
-     * @param resultConsumer Consumer that receives the base64 image result
+     * @param captureFunction Supplier that returns CompletableFuture with raw byte[] image
+     * @param resultConsumer Consumer that receives the raw byte[] image result
      */
-    public BufferedCapture(Supplier<CompletableFuture<String>> captureFunction,
-            Consumer<String> resultConsumer) {
+    public BufferedCapture(Supplier<CompletableFuture<byte[]>> captureFunction,
+            Consumer<byte[]> resultConsumer) {
         if (captureFunction == null) {
             throw new IllegalArgumentException("Capture function cannot be null");
         }
@@ -33,7 +33,7 @@ public class BufferedCapture {
         }
 
         this.executeCaptureRunnable = () -> {
-            CompletableFuture<String> future = captureFunction.get();
+            CompletableFuture<byte[]> future = captureFunction.get();
             if (future != null) {
                 future.thenAccept(resultConsumer);
             }
