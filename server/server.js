@@ -294,10 +294,25 @@ androidIo.on("connection", async (socket) => {
             }
 
             try {
-                if (!Buffer.isBuffer(data) && !(data instanceof ArrayBuffer)) {
-                    throw new Error('Invalid image data: not a buffer');
+                let buffer;
+                
+                // Handle different data formats from Android
+                if (Buffer.isBuffer(data)) {
+                    // Already a Buffer (shouldn't happen from Android)
+                    buffer = data;
+                } else if (ArrayBuffer.isView(data)) {
+                    // TypedArray like Uint8Array
+                    buffer = Buffer.from(data);
+                } else if (data instanceof ArrayBuffer) {
+                    // Raw ArrayBuffer
+                    buffer = Buffer.from(new Uint8Array(data));
+                } else if (data && typeof data === 'object' && Array.isArray(data)) {
+                    // Java array serialized as regular array
+                    buffer = Buffer.from(data);
+                } else {
+                    throw new Error('Invalid image data: not a buffer or array, got ' + typeof data);
                 }
-                const buffer = Buffer.from(data);
+                
                 if (buffer.length === 0) {
                     throw new Error('Empty image data');
                 }
