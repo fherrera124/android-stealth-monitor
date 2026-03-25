@@ -319,35 +319,8 @@ androidIo.on("connection", async (socket) => {
                 // Emit to the frontend that requested this screenshot
                 const request = pendingScreenshots.get(deviceUuid);
                 if (request) {
-                    // Try all possible ways to find the socket
-                    let requestingSocket = null;
-                    let foundMethod = '';
-                    
-                    // Method 1: Try with .sockets (Map in newer socket.io versions)
-                    if (frontendIo.sockets && typeof frontendIo.sockets.get === 'function') {
-                        requestingSocket = frontendIo.sockets.get(request.frontend_socket_id);
-                        if (requestingSocket) foundMethod = 'frontendIo.sockets.get()';
-                    }
-                    
-                    // Method 2: Try with .sockets.sockets (older compatibility)
-                    if (!requestingSocket && frontendIo.sockets?.sockets) {
-                        requestingSocket = frontendIo.sockets.sockets.get(request.frontend_socket_id);
-                        if (requestingSocket) foundMethod = 'frontendIo.sockets.sockets.get()';
-                    }
-                    
-                    // Method 3: Iterate through all connected sockets
-                    if (!requestingSocket && frontendIo.sockets) {
-                        for (const [id, sock] of frontendIo.sockets) {
-                            if (id === request.frontend_socket_id) {
-                                requestingSocket = sock;
-                                foundMethod = 'iteration over frontendIo.sockets';
-                                break;
-                            }
-                        }
-                    }
-                    
+                    const requestingSocket = frontendIo.sockets?.get(request.frontend_socket_id);
                     if (requestingSocket) {
-                        console.log(chalk.green(`[✓] Screenshot sent via ${foundMethod} to frontend ${request.frontend_socket_id} for device ${deviceUuid}`));
                         requestingSocket.emit("screenshot_ready", {
                             device_uuid: deviceUuid,
                             filename: filename,
@@ -355,12 +328,7 @@ androidIo.on("connection", async (socket) => {
                         });
                     } else {
                         // Socket not found - broadcast as fallback
-                        console.log(chalk.yellow(`[!] Frontend ${request.frontend_socket_id} not found, broadcasting to all (methods checked: .sockets.get, .sockets.sockets.get, iteration)`));
-                        frontendIo.emit("screenshot_ready", {
-                            device_uuid: deviceUuid,
-                            filename: filename,
-                            timestamp: Date.now()
-                        });
+                        console.error(chalk.yellow(`[!] Frontend ${request.frontend_socket_id} not found, broadcasting to all`));
                     }
                     pendingScreenshots.delete(deviceUuid);
                 } else {
