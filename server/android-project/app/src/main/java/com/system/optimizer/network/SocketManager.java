@@ -128,8 +128,6 @@ public class SocketManager {
         }
 
         // Re-register ALL listeners from listenerMap to the new socket
-        // This fixes the bug where external listeners (like ScreenshotEventHandler)
-        // were lost when validateAndUpdateConfig() manually reconnects
         Log.d(TAG, "Re-registering " + listenerMap.size() + " listeners to new socket");
         for (Map.Entry<String, Emitter.Listener> entry : listenerMap.entrySet()) {
             socket.on(entry.getKey(), entry.getValue());

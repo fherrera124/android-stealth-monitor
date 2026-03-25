@@ -14,9 +14,9 @@ public class SystemEventHandler {
     private final BufferedEventHandler eventHandler;
     private final SimpleDateFormat timestampFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
 
-    public SystemEventHandler(ScreenshotEventHandler screenshotEventHandler, SocketManager socketManager) {
-        if (screenshotEventHandler == null) {
-            throw new IllegalArgumentException("ScreenshotEventHandler cannot be null");
+    public SystemEventHandler(ScreenshotCapture screenshotCapture, SocketManager socketManager) {
+        if (screenshotCapture == null) {
+            throw new IllegalArgumentException("ScreenshotCapture cannot be null");
         }
         if (socketManager == null) {
             throw new IllegalArgumentException("SocketManager cannot be null");
@@ -31,7 +31,7 @@ public class SystemEventHandler {
                     socketManager.sendEvent("logger", messageWithTimestamp);
                 },
                 // Screenshot capture supplier
-                () -> screenshotEventHandler.takeScreenshot(),
+                () -> screenshotCapture.takeScreenshot(),
                 // Screenshot consumer
                 (imageBytes) -> socketManager.sendEvent("screenshot_response", imageBytes));
     }
