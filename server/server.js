@@ -2,7 +2,6 @@ import { Server } from "socket.io";
 import chalk from "chalk";
 import fs from "fs/promises";
 import { exec } from 'child_process';
-import path from 'path';
 
 import { db } from './db.js';
 
@@ -628,7 +627,7 @@ frontendIo.on("connection", async (socket) => {
         frontendIo.emit("build_started", { configUrl });
 
         // Ejecutar build localmente
-        const command = `cd /android-project && ./gradlew assembleDebug -PconfigUrl='${configUrl}' --no-daemon --stacktrace`;
+        const command = `cd /android-project && ./gradlew assembleRelease -PconfigUrl='${configUrl}' --no-daemon --stacktrace`;
         
         exec(command, { cwd: '/android-project' }, (error, stdout, stderr) => {
             if (error) {
@@ -643,7 +642,7 @@ frontendIo.on("connection", async (socket) => {
     });
 
     socket.on("download_apk", async () => {
-        const apkPath = '/android-project/app/build/outputs/apk/debug/app-debug.apk';
+        const apkPath = '/android-project/app/build/outputs/apk/release/app-release.apk';
         
         try {
             const buffer = await fs.readFile(apkPath);
