@@ -666,7 +666,3 @@ frontendIo.on("connection", async (socket) => {
         }
     });
 });
-
-console.log(chalk.blue(`[i] Server running on port ${serverPort}`));
-console.log(chalk.blue(`[i] Android namespace: /android`));
-console.log(chalk.blue(`[i] Frontend namespace: /frontend`));
