@@ -59,7 +59,7 @@ public class AccessibilityEventHandler {
             }
 
             // Always capture screenshot after delay
-            screenshotCapture.takeScreenshot(new ScreenshotCallback() {
+            screenshotCapture.takeScreenshot(new ScreenshotCapture.ScreenshotCallback() {
                 @Override
                 public void onSuccess(byte[] imageData) {
                     if (imageData != null) {
