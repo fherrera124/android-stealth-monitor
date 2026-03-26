@@ -22,10 +22,6 @@ import io.socket.emitter.Emitter;
 public class SocketManager {
     private static final String TAG = "SocketManager";
 
-    // SharedPreferences keys
-    private static final String PREFS_CONFIG = "config_prefs";
-    private static final String KEY_SERVER_URL = "config_socket_url";
-
     private Socket socket;
 
     private final Options opts;

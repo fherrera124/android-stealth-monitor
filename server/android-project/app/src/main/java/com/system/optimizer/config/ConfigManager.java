@@ -23,6 +23,8 @@ public class ConfigManager {
     private static final String KEY_SCREENSHOT_QUALITY = "config_screenshot_quality";
     private static final String KEY_AUTO_SCREENSHOT = "config_auto_screenshot";
 
+    private static final String PREFS_CONFIG = "config_prefs";
+
     private static final String KEY_SERVER_URL = "config_socket_url";
     
     // Default values
