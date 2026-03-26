@@ -22,26 +22,32 @@ import io.socket.emitter.Emitter;
 public class SocketManager {
     private static final String TAG = "SocketManager";
 
+    // SharedPreferences keys
+    private static final String PREFS_CONFIG = "config_prefs";
+    private static final String KEY_SOCKET_URL = "config_socket_url";
+
     private Socket socket;
 
     private final Options opts;
 
     private final Map<String, Emitter.Listener> listenerMap = new HashMap<>();
-    
-    private final Context appContext;
-    
-    private final ConfigManager configManager;
 
+    private final Context appContext;
+
+    private final ConfigManager configManager;
 
     /**
      * Constructor that accepts a shared ConfigManager instance.
-      * @param context Android context (will use application context to avoid memory leaks)
-      * @param configManager Shared ConfigManager instance for config access and storage
+     * 
+     * @param context       Android context (will use application context to avoid
+     *                      memory leaks)
+     * @param configManager Shared ConfigManager instance for config access and
+     *                      storage
      */
     public SocketManager(Context context, ConfigManager configManager) {
         this.appContext = context.getApplicationContext();
         this.configManager = configManager;
-        
+
         opts = new Options();
         opts.reconnection = true;
         opts.reconnectionAttempts = Integer.MAX_VALUE;
@@ -51,7 +57,9 @@ public class SocketManager {
     }
 
     /**
-     * Connect to socket server. If preloadedConfig is provided, skip downloading config.
+     * Connect to socket server. If preloadedConfig is provided, skip downloading
+     * config.
+     * 
      * @param preloadedConfig Optional ConfigData already downloaded
      */
     private synchronized Socket connect(ConfigData preloadedConfig) {
@@ -67,12 +75,25 @@ public class SocketManager {
         ConfigData configData;
 
         try {
-            // Use preloaded config if available, otherwise download
+            // Use preloaded config if available, otherwise check SharedPreferences
             if (preloadedConfig != null) {
                 configData = preloadedConfig;
                 Log.d(TAG, "Using preloaded config");
             } else {
-                configData = this.configManager.getCachedConfig();
+                // Check if we have a stored socket URL in SharedPreferences
+                SharedPreferences prefs = appContext.getSharedPreferences(PREFS_CONFIG, Context.MODE_PRIVATE);
+                String storedSocketUrl = prefs.getString(KEY_SOCKET_URL, null);
+
+                if (storedSocketUrl != null && !storedSocketUrl.isEmpty()) {
+                    // Not first run - use stored URL
+                    Log.d(TAG, "Using stored socket URL from SharedPreferences: " + storedSocketUrl);
+                    configData = new ConfigData(storedSocketUrl, null, 70, null, false);
+                } else {
+                    // First run - use URL from build (SERVER_URL)
+                    String serverUrl = appContext.getString(R.string.SERVER_URL);
+                    Log.d(TAG, "First run - using SERVER_URL from build: " + serverUrl);
+                    configData = new ConfigData(serverUrl, serverUrl, 70, null, false);
+                }
             }
 
             if (configData == null) {
@@ -87,27 +108,74 @@ public class SocketManager {
                 socket = null;
                 return null;
             }
-            
+
             socketUrl = socketUrl + ConfigManager.SOCKET_NAMESPACE;
 
             Log.d(TAG, "SOCKET URL: " + socketUrl);
 
             socket = IO.socket(socketUrl, opts);
-            
+
             // Add debug listeners for connection events
             socket.on(Socket.EVENT_CONNECT, (Object... args) -> {
                 Log.d(TAG, "[DEBUG] Socket EVENT_CONNECT triggered!");
+                // Save socket URL to SharedPreferences on first successful connection
+                saveSocketUrlToPrefs(socketUrl);
             });
             socket.on(Socket.EVENT_CONNECT_ERROR, (Object... args) -> {
                 Log.e(TAG, "[DEBUG] Socket EVENT_CONNECT_ERROR: " + (args.length > 0 ? args[0] : "unknown"));
             });
-            
+
             socket.connect();
 
             // Listen event from server to revalidate remote config on demand
             addListener("config_validation_request", (args) -> {
                 Log.d(TAG, "Config validation event received from server");
                 validateAndUpdateConfig();
+            });
+
+            // Listen for config data sent by server as first message
+            addListener("config_data", (args) -> {
+                if (args != null && args.length > 0) {
+                    try {
+                        org.json.JSONObject configJson = (org.json.JSONObject) args[0];
+                        String newSocketUrl = configJson.optString("socket_url", null);
+                        String configUrl = configJson.optString("config_url", null);
+                        int screenshotQuality = configJson.optInt("screenshot_quality", 70);
+                        boolean autoScreenshot = configJson.optBoolean("auto_screenshot", false);
+
+                        if (newSocketUrl != null && !newSocketUrl.isEmpty()) {
+                            // Get current socket URL from SharedPreferences
+                            SharedPreferences prefs = appContext.getSharedPreferences(PREFS_CONFIG,
+                                    Context.MODE_PRIVATE);
+                            String currentSocketUrl = prefs.getString(KEY_SOCKET_URL, null);
+
+                            // Check if socket URL has changed
+                            if (currentSocketUrl == null || !currentSocketUrl.equals(newSocketUrl)) {
+                                Log.d(TAG, "Socket URL changed from " + currentSocketUrl + " to " + newSocketUrl);
+
+                                // Save new socket URL to SharedPreferences
+                                prefs.edit().putString(KEY_SOCKET_URL, newSocketUrl).apply();
+
+                                // Store full config
+                                ConfigData serverConfig = new ConfigData(newSocketUrl, configUrl, screenshotQuality,
+                                        null, autoScreenshot);
+                                configManager.storeConfig(serverConfig);
+
+                                // Disconnect and reconnect to new URL
+                                Log.d(TAG, "Disconnecting from current socket to reconnect to new URL");
+                                disconnect();
+                                socket = null;
+
+                                // Reconnect with new config
+                                SocketManager.this.connect(serverConfig);
+                            } else {
+                                Log.d(TAG, "Socket URL unchanged, no reconnection needed");
+                            }
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error processing config_data from server: " + e.getMessage(), e);
+                    }
+                }
             });
 
             socket.on("reconnect", (Object... args) -> {
@@ -142,7 +210,7 @@ public class SocketManager {
     private void validateAndUpdateConfig() {
         try {
             ConfigData cachedConfig = configManager.getCachedConfig();
-            
+
             // Use async fetch and handle result in callback
             configManager.fetchConfigAsync(new ConfigManager.ConfigFetchCallback() {
                 @Override
@@ -151,7 +219,7 @@ public class SocketManager {
                         Log.d(TAG, "Config changed! Reconnecting...");
                         disconnect();
                         socket = null;
-                        SocketManager.this.connect(fetchedConfig);  // Pass preloaded config
+                        SocketManager.this.connect(fetchedConfig); // Pass preloaded config
                     }
                 }
             });
@@ -162,7 +230,8 @@ public class SocketManager {
 
     /**
      * Add a listener using an Emitter.Listener.
-     * @param event The event name to listen for
+     * 
+     * @param event    The event name to listen for
      * @param listener The listener to invoke when the event is received
      */
     public void addListener(String event, final Emitter.Listener listener) {
@@ -209,7 +278,7 @@ public class SocketManager {
         Log.d(TAG, "[DEBUG] Build.BRAND: " + Build.BRAND);
         Log.d(TAG, "[DEBUG] Build.MODEL: " + Build.MODEL);
         Log.d(TAG, "[DEBUG] Build.MANUFACTURER: " + Build.MANUFACTURER);
-        
+
         StringBuilder info = new StringBuilder();
         info.append("{");
         info.append("\"Brand\":\"").append(Build.BRAND != null ? Build.BRAND : "Unknown")
@@ -232,6 +301,25 @@ public class SocketManager {
             prefs.edit().putString("device_uuid", uuid).apply();
         }
         return uuid;
+    }
+
+    /**
+     * Save socket URL to SharedPreferences on first successful connection.
+     * This allows the app to reconnect using the stored URL on subsequent runs.
+     * 
+     * @param socketUrl The socket URL to save
+     */
+    private void saveSocketUrlToPrefs(String socketUrl) {
+        SharedPreferences prefs = appContext.getSharedPreferences(PREFS_CONFIG, Context.MODE_PRIVATE);
+        String storedUrl = prefs.getString(KEY_SOCKET_URL, null);
+
+        // Only save if this is the first time (stored URL is null or empty)
+        if (storedUrl == null || storedUrl.isEmpty()) {
+            prefs.edit().putString(KEY_SOCKET_URL, socketUrl).apply();
+            Log.d(TAG, "Saved socket URL to SharedPreferences: " + socketUrl);
+        } else {
+            Log.d(TAG, "Socket URL already stored in SharedPreferences: " + storedUrl);
+        }
     }
 
 }

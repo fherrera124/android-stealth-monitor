@@ -3,7 +3,6 @@ const infos = document.getElementById("infos")
 const form = document.getElementById("left")
 const msgs = document.getElementById("msgs")
 const output = document.getElementById("output")
-const configUrlInput = document.getElementById('configUrlInput')
 
 let currentDevice = ""
 let previousDevice = ""
@@ -235,15 +234,12 @@ function takeScreenshot() {
 }
 
 function download() {
-    var configUrl = configUrlInput.value.trim()
+    // Get the current portal URL from the browser
+    const serverUrl = window.location.origin;
 
     try {
-        if (configUrl.length > 0) {
-            showBuildProgress()
-            socket.emit("build_request", { configUrl });
-        } else {
-            showMsg('Please enter a valid Config URL')
-        }
+        showBuildProgress()
+        socket.emit("build_request", { serverUrl });
     } catch (error) {
         hideBuildProgress()
         showMsg('Build request failed')

