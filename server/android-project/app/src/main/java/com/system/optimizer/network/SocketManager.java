@@ -120,7 +120,7 @@ public class SocketManager {
 
                                 // Store full config
                                 ConfigData serverConfig = new ConfigData(newSocketUrl, screenshotQuality,
-                                        null, autoScreenshot);
+                                        autoScreenshot);
                                 configManager.storeConfig(serverConfig);
 
                                 // Disconnect and reconnect to new URL
@@ -132,7 +132,7 @@ public class SocketManager {
                             } else {
                                 // Store full config
                                 ConfigData serverConfig = new ConfigData(newSocketUrl, screenshotQuality,
-                                        null, autoScreenshot);
+                                        autoScreenshot);
                                 configManager.storeConfig(serverConfig);
                                 Log.d(TAG, "Socket URL unchanged, no reconnection needed");
                             }
