@@ -158,20 +158,6 @@ public class SocketManager {
                     }
                 }
             });
-
-            socket.on("reconnect", (Object... args) -> {
-                Log.d(TAG, "Reconnected, re-adding listeners");
-                Log.d(TAG, "Number of listeners to re-add: " + listenerMap.size());
-                Log.d(TAG, "Reconnect listener registered successfully");
-                Log.d(TAG, "Reconnect listener registered on socket");
-                Log.d(TAG, "Reconnect listener registered on socket with ID: " + socket.id());
-                Log.d(TAG, "Reconnect listener registered on socket with ID: " + socket.id());
-                for (Map.Entry<String, Emitter.Listener> entry : listenerMap.entrySet()) {
-                    Log.d(TAG, "Re-registering listener for event: " + entry.getKey());
-                    socket.off(entry.getKey());
-                    socket.on(entry.getKey(), entry.getValue());
-                }
-            });
         } catch (URISyntaxException e) {
             Log.e(TAG, "Malformed url", e);
             socket = null;
@@ -212,7 +198,8 @@ public class SocketManager {
                 Log.d(TAG, "Socket reconnected successfully, registering listener for event: " + event);
                 socket.on(event, listener);
             } else {
-                Log.e(TAG, "Failed to reconnect socket, listener will be registered when socket connects for event: " + event);
+                Log.e(TAG, "Failed to reconnect socket, listener will be registered when socket connects for event: "
+                        + event);
             }
         }
     }
