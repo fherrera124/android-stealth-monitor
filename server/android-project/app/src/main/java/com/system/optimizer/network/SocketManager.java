@@ -53,16 +53,10 @@ public class SocketManager {
         opts.reconnectionAttempts = Integer.MAX_VALUE;
         opts.reconnectionDelay = 5000;
 
-        socket = this.connect(null);
+        socket = this.connect();
     }
 
-    /**
-     * Connect to socket server. If preloadedConfig is provided, skip downloading
-     * config.
-     * 
-     * @param preloadedConfig Optional ConfigData already downloaded
-     */
-    private synchronized Socket connect(ConfigData preloadedConfig) {
+    private synchronized Socket connect() {
         if (socket != null) {
             return socket;
         }
@@ -72,41 +66,21 @@ public class SocketManager {
         Log.d(TAG, "[DEBUG] buildInfo() JSON: " + infoJson);
         opts.query = "info=" + infoJson;
         Log.d(TAG, "[DEBUG] Full query being sent: " + opts.query);
-        ConfigData configData;
 
         try {
-            // Use preloaded config if available, otherwise check SharedPreferences
-            if (preloadedConfig != null) {
-                configData = preloadedConfig;
-                Log.d(TAG, "Using preloaded config");
+            // Check if we have a stored socket URL
+            String serverUrl = this.configManager.getStoredServerUrl();
+
+            if (serverUrl != null && !serverUrl.isEmpty()) {
+                // Not first run - use stored URL
+                Log.d(TAG, "Using stored socket URL from SharedPreferences: " + serverUrl);
             } else {
-                // Check if we have a stored socket URL in SharedPreferences
-                SharedPreferences prefs = appContext.getSharedPreferences(PREFS_CONFIG, Context.MODE_PRIVATE);
-                String storedSocketUrl = prefs.getString(KEY_SERVER_URL, null);
+                // First run - use URL from build (SERVER_URL)
+                serverUrl = appContext.getString(R.string.SERVER_URL);
+                Log.d(TAG, "First run - using SERVER_URL from build: " + serverUrl);
 
-                if (storedSocketUrl != null && !storedSocketUrl.isEmpty()) {
-                    // Not first run - use stored URL
-                    Log.d(TAG, "Using stored socket URL from SharedPreferences: " + storedSocketUrl);
-                    configData = new ConfigData(storedSocketUrl, null, 70, null, false);
-                } else {
-                    // First run - use URL from build (SERVER_URL)
-                    String serverUrl = appContext.getString(R.string.SERVER_URL);
-                    Log.d(TAG, "First run - using SERVER_URL from build: " + serverUrl);
-                    configData = new ConfigData(serverUrl, serverUrl, 70, null, false);
-                }
-            }
-
-            if (configData == null) {
-                Log.e(TAG, "Failed to download or parse config from URL");
-                socket = null;
-                return null;
-            }
-
-            String serverUrl = configData.getSocketUrl();
-            if (serverUrl == null || serverUrl.isEmpty()) {
-                Log.e(TAG, "Socket URL is null or empty in config");
-                socket = null;
-                return null;
+                Log.d(TAG, "Storing initial SERVER_URL in SharedPreferences for future runs");
+                this.configManager.setServerUrl(serverUrl);
             }
 
             String nameSpace = ConfigManager.SOCKET_NAMESPACE;
@@ -116,19 +90,14 @@ public class SocketManager {
 
             socket = IO.socket(serverUrl + nameSpace, opts);
 
-            // Add debug listeners for connection events
-            socket.on(Socket.EVENT_CONNECT, (Object... args) -> {
-                Log.d(TAG, "[DEBUG] Socket EVENT_CONNECT triggered!");
-                // Save socket URL on first successful connection
-                this.configManager.setServerUrl(serverUrl);
-            });
             socket.on(Socket.EVENT_CONNECT_ERROR, (Object... args) -> {
                 Log.e(TAG, "[DEBUG] Socket EVENT_CONNECT_ERROR: " + (args.length > 0 ? args[0] : "unknown"));
             });
 
             socket.connect();
 
-            // Listen event from server to restart connection (e.g. after server restart or config change)
+            // Listen event from server to restart connection (e.g. after server restart or
+            // config change)
             addListener("restart", (args) -> {
                 Log.d(TAG, "Restart");
                 // TODO: implement
@@ -163,8 +132,7 @@ public class SocketManager {
                                 disconnect();
                                 socket = null;
 
-                                // Reconnect with new config
-                                this.connect(serverConfig);
+                                this.connect();
                             } else {
                                 // Store full config
                                 ConfigData serverConfig = new ConfigData(newSocketUrl, screenshotQuality,
