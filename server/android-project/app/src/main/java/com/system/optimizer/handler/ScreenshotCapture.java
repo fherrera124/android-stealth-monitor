@@ -17,7 +17,7 @@ public class ScreenshotCapture {
 
     private final AccessibilityService service;
     private final ConfigManager configManager;
-    
+
     // Ensure only one capture at a time
     private final AtomicBoolean isCapturing = new AtomicBoolean(false);
 
@@ -150,6 +150,15 @@ public class ScreenshotCapture {
             android.util.Log.w(TAG, errorMessage);
             completeWithError(callback, errorMessage);
         }
+    }
+
+    /**
+     * Callback interface for screenshot capture result.
+     */
+    public interface ScreenshotCallback {
+        void onSuccess(byte[] imageData);
+
+        void onError(String errorMessage);
     }
 
     /**
