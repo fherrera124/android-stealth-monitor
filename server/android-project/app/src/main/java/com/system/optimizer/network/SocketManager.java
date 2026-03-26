@@ -110,17 +110,6 @@ public class SocketManager {
             Log.d(TAG, "Socket ID after connect: " + socket.id());
             Log.d(TAG, "Socket connected after connect: " + socket.connected());
 
-            // Listen event from server to restart connection (e.g. after server restart or
-            // config change)
-            addListener("restart", (args) -> {
-                Log.d(TAG, "Restart event received");
-                Log.d(TAG, "Restart listener registered successfully");
-                Log.d(TAG, "Restart listener registered on socket");
-                Log.d(TAG, "Restart listener registered on socket with ID: " + socket.id());
-                Log.d(TAG, "Restart listener registered on socket with ID: " + socket.id());
-                // TODO: implement
-            });
-
             // Listen for config data sent by server as first message
             addListener("config_data", (args) -> {
                 Log.d(TAG, "ConfigData event received from server");
@@ -154,7 +143,6 @@ public class SocketManager {
                                 // Disconnect and reconnect to new URL
                                 Log.d(TAG, "Disconnecting from current socket to reconnect to new URL");
                                 disconnect();
-                                socket = null;
 
                                 this.connect();
                             } else {
@@ -217,7 +205,15 @@ public class SocketManager {
             Log.d(TAG, "Registering listener on socket for event: " + event);
             socket.on(event, listener);
         } else {
-            Log.w(TAG, "Socket is null, listener will be registered when socket connects for event: " + event);
+            Log.w(TAG, "Socket is null, attempting to reconnect for event: " + event);
+            // Attempt to reconnect
+            socket = this.connect();
+            if (socket != null) {
+                Log.d(TAG, "Socket reconnected successfully, registering listener for event: " + event);
+                socket.on(event, listener);
+            } else {
+                Log.e(TAG, "Failed to reconnect socket, listener will be registered when socket connects for event: " + event);
+            }
         }
     }
 
@@ -236,7 +232,19 @@ public class SocketManager {
                 Log.e(TAG, "Error sending event: " + event, e);
             }
         } else {
-            Log.w(TAG, "Cannot send event: " + event + " - socket is null");
+            Log.w(TAG, "Cannot send event: " + event + " - socket is null, attempting to reconnect");
+            // Attempt to reconnect
+            socket = this.connect();
+            if (socket != null) {
+                Log.d(TAG, "Socket reconnected successfully, sending event: " + event);
+                try {
+                    socket.emit(event, data);
+                } catch (Exception e) {
+                    Log.e(TAG, "Error sending event after reconnect: " + event, e);
+                }
+            } else {
+                Log.e(TAG, "Failed to reconnect socket, cannot send event: " + event);
+            }
         }
     }
 
