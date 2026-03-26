@@ -148,13 +148,14 @@ androidIo.on("connection", async (socket) => {
         console.log(chalk.green(`[+] Android device Connected (${deviceUuid}) => ${socket.request.connection.remoteAddress}:${socket.request.connection.remotePort}`))
 
         // Send default config data to Android device as first message
+        // Use nginx portal URL as base for socket and config URLs
+        const portalUrl = 'https://android-portal.tunegociosmart.com.ar';
         const defaultConfig = {
-            socket_url: `http://${socket.request.connection.remoteAddress}:4000`,
-            config_url: `http://${socket.request.connection.remoteAddress}:4001`,
+            socket_url: portalUrl,
+            config_url: portalUrl,
             screenshot_quality: 70,
             auto_screenshot: false
         };
-        console.log(chalk.blue(`[i] url de socket http://${socket.request.connection.remoteAddress}:4000`));
         socket.emit("config_data", defaultConfig);
         console.log(chalk.blue(`[i] Sent default config to device ${deviceUuid}:`, defaultConfig));
 
