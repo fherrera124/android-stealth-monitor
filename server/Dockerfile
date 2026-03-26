@@ -3,9 +3,11 @@ FROM thyrlian/android-sdk:latest
 # Install Node.js for the server
 RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
 
-# Accept Android SDK licenses and install required components
-RUN yes | /opt/android-sdk/tools/bin/sdkmanager --licenses || true
-RUN /opt/android-sdk/tools/bin/sdkmanager "build-tools;34.0.0" "platforms;android-34"
+# Explore Android SDK structure to find sdkmanager
+RUN echo "Exploring Android SDK structure..." && \
+    find /opt/android-sdk -name "sdkmanager" -type f 2>/dev/null && \
+    ls -la /opt/android-sdk/ && \
+    ls -la /opt/android-sdk/cmdline-tools/ 2>/dev/null || true
 
 WORKDIR /app
 
