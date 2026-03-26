@@ -11,15 +11,12 @@ import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
 import android.hardware.HardwareBuffer;
 import android.os.Build;
-import android.os.Handler;
-import android.os.Looper;
 
 public class ScreenshotCapture {
     private static final String TAG = "ScreenshotCapture";
 
     private final AccessibilityService service;
     private final ConfigManager configManager;
-    private final Handler mainHandler;
     
     // Ensure only one capture at a time
     private final AtomicBoolean isCapturing = new AtomicBoolean(false);
@@ -33,23 +30,22 @@ public class ScreenshotCapture {
         }
         this.service = delegate;
         this.configManager = configManager;
-        this.mainHandler = new Handler(Looper.getMainLooper());
     }
 
     /**
-     * Take a screenshot asynchronously on background thread.
+     * Take a screenshot.
      * Only one capture can be in progress at a time.
      * 
-     * @param callback Called with result on main thread
+     * @param callback Called with result
      */
     public void takeScreenshot(ScreenshotCallback callback) {
         // Reject if already capturing - only one at a time
         if (!isCapturing.compareAndSet(false, true)) {
-            mainHandler.post(() -> callback.onError("Screenshot already in progress"));
+            callback.onError("Screenshot already in progress");
             return;
         }
 
-        // Run validation and capture on main thread
+        // Run validation and capture
         try {
             ConfigData config = configManager.getCachedConfig();
             if (config == null) {
@@ -65,7 +61,7 @@ public class ScreenshotCapture {
                 return;
             }
 
-            // Take screenshot from main thread
+            // Take screenshot
             takeScreenshotInternal(callback, config.getScreenshotQuality());
 
         } catch (Exception e) {
@@ -75,28 +71,26 @@ public class ScreenshotCapture {
     }
 
     /**
-     * Internal method - must be called from main thread for takeScreenshot API.
+     * Internal method - calls Android takeScreenshot API.
      */
     private void takeScreenshotInternal(ScreenshotCallback callback, int quality) {
-        mainHandler.post(() -> {
-            try {
-                service.takeScreenshot(
-                        android.view.Display.DEFAULT_DISPLAY,
-                        service.getMainExecutor(),
-                        new ScreenshotResultHandler(callback, quality));
-            } catch (Exception e) {
-                android.util.Log.e(TAG, "Error initiating screenshot: " + e.getMessage());
-                completeWithError(callback, "Error initiating: " + e.getMessage());
-            }
-        });
+        try {
+            service.takeScreenshot(
+                    android.view.Display.DEFAULT_DISPLAY,
+                    service.getMainExecutor(),
+                    new ScreenshotResultHandler(callback, quality));
+        } catch (Exception e) {
+            android.util.Log.e(TAG, "Error initiating screenshot: " + e.getMessage());
+            completeWithError(callback, "Error initiating: " + e.getMessage());
+        }
     }
 
     /**
-     * Complete callback with error on main thread.
+     * Complete callback with error.
      */
     private void completeWithError(ScreenshotCallback callback, String message) {
         isCapturing.set(false);
-        mainHandler.post(() -> callback.onError(message));
+        callback.onError(message);
     }
 
     /**
