@@ -101,6 +101,7 @@ public class SocketManager {
                 Log.e(TAG, "[DEBUG] EVENT_CONNECT_ERROR listener registered successfully");
                 Log.e(TAG, "[DEBUG] EVENT_CONNECT_ERROR listener registered on socket");
                 Log.e(TAG, "[DEBUG] EVENT_CONNECT_ERROR listener registered on socket with ID: " + socket.id());
+                Log.e(TAG, "[DEBUG] EVENT_CONNECT_ERROR listener registered on socket with ID: " + socket.id());
             });
 
             socket.connect();
@@ -175,6 +176,7 @@ public class SocketManager {
                 Log.d(TAG, "Number of listeners to re-add: " + listenerMap.size());
                 Log.d(TAG, "Reconnect listener registered successfully");
                 Log.d(TAG, "Reconnect listener registered on socket");
+                Log.d(TAG, "Reconnect listener registered on socket with ID: " + socket.id());
                 Log.d(TAG, "Reconnect listener registered on socket with ID: " + socket.id());
                 for (Map.Entry<String, Emitter.Listener> entry : listenerMap.entrySet()) {
                     Log.d(TAG, "Re-registering listener for event: " + entry.getKey());
