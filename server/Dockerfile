@@ -3,11 +3,16 @@ FROM thyrlian/android-sdk:latest
 # Install Node.js for the server
 RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
 
-# Explore Android SDK structure to find sdkmanager
-RUN echo "Exploring Android SDK structure..." && \
-    find /opt/android-sdk -name "sdkmanager" -type f 2>/dev/null && \
-    ls -la /opt/android-sdk/ && \
-    ls -la /opt/android-sdk/cmdline-tools/ 2>/dev/null || true
+# Find sdkmanager path and install required Android SDK components
+RUN SDK_MANAGER=$(find /opt -name "sdkmanager" -type f 2>/dev/null | head -1) && \
+    if [ -n "$SDK_MANAGER" ]; then \
+        echo "Found sdkmanager at: $SDK_MANAGER"; \
+        yes | $SDK_MANAGER --licenses || true; \
+        $SDK_MANAGER "build-tools;34.0.0" "platforms;android-34"; \
+    else; \
+        echo "ERROR: sdkmanager not found"; \
+        find /opt -name "sdkmanager" 2>/dev/null; \
+    fi
 
 WORKDIR /app
 
