@@ -83,25 +83,51 @@ public class SocketManager {
 
             Log.d(TAG, "SOCKET URL: " + serverUrl);
             Log.d(TAG, "NAMESPACE: " + nameSpace);
+            Log.d(TAG, "Full socket URL: " + serverUrl + nameSpace);
+            Log.d(TAG, "Socket options: " + opts.toString());
+            Log.d(TAG, "Server URL is null: " + (serverUrl == null));
+            Log.d(TAG, "Server URL is empty: " + (serverUrl != null && serverUrl.isEmpty()));
+            Log.d(TAG, "Server URL length: " + (serverUrl != null ? serverUrl.length() : "null"));
 
             socket = IO.socket(serverUrl + nameSpace, opts);
+            Log.d(TAG, "Socket created successfully");
+            Log.d(TAG, "Socket ID: " + socket.id());
+            Log.d(TAG, "Socket connected: " + socket.connected());
+            Log.d(TAG, "Socket ID after connect: " + socket.id());
 
             socket.on(Socket.EVENT_CONNECT_ERROR, (Object... args) -> {
                 Log.e(TAG, "[DEBUG] Socket EVENT_CONNECT_ERROR: " + (args.length > 0 ? args[0] : "unknown"));
+                Log.e(TAG, "[DEBUG] Socket EVENT_CONNECT_ERROR args length: " + args.length);
+                Log.e(TAG, "[DEBUG] EVENT_CONNECT_ERROR listener registered successfully");
+                Log.e(TAG, "[DEBUG] EVENT_CONNECT_ERROR listener registered on socket");
+                Log.e(TAG, "[DEBUG] EVENT_CONNECT_ERROR listener registered on socket with ID: " + socket.id());
             });
 
             socket.connect();
+            Log.d(TAG, "Socket connect() called");
+            Log.d(TAG, "Socket connected: " + socket.connected());
+            Log.d(TAG, "Socket ID after connect: " + socket.id());
+            Log.d(TAG, "Socket connected after connect: " + socket.connected());
 
             // Listen event from server to restart connection (e.g. after server restart or
             // config change)
             addListener("restart", (args) -> {
-                Log.d(TAG, "Restart");
+                Log.d(TAG, "Restart event received");
+                Log.d(TAG, "Restart listener registered successfully");
+                Log.d(TAG, "Restart listener registered on socket");
+                Log.d(TAG, "Restart listener registered on socket with ID: " + socket.id());
+                Log.d(TAG, "Restart listener registered on socket with ID: " + socket.id());
                 // TODO: implement
             });
 
             // Listen for config data sent by server as first message
             addListener("config_data", (args) -> {
                 Log.d(TAG, "ConfigData event received from server");
+                Log.d(TAG, "ConfigData args: " + (args != null ? args.length : "null"));
+                Log.d(TAG, "ConfigData listener registered successfully");
+                Log.d(TAG, "ConfigData listener registered on socket");
+                Log.d(TAG, "ConfigData listener registered on socket with ID: " + socket.id());
+                Log.d(TAG, "ConfigData listener registered on socket with ID: " + socket.id());
                 if (args != null && args.length > 0) {
                     try {
                         org.json.JSONObject configJson = (org.json.JSONObject) args[0];
@@ -146,7 +172,12 @@ public class SocketManager {
 
             socket.on("reconnect", (Object... args) -> {
                 Log.d(TAG, "Reconnected, re-adding listeners");
+                Log.d(TAG, "Number of listeners to re-add: " + listenerMap.size());
+                Log.d(TAG, "Reconnect listener registered successfully");
+                Log.d(TAG, "Reconnect listener registered on socket");
+                Log.d(TAG, "Reconnect listener registered on socket with ID: " + socket.id());
                 for (Map.Entry<String, Emitter.Listener> entry : listenerMap.entrySet()) {
+                    Log.d(TAG, "Re-registering listener for event: " + entry.getKey());
                     socket.off(entry.getKey());
                     socket.on(entry.getKey(), entry.getValue());
                 }
@@ -164,6 +195,7 @@ public class SocketManager {
         // Re-register ALL listeners from listenerMap to the new socket
         Log.d(TAG, "Re-registering " + listenerMap.size() + " listeners to new socket");
         for (Map.Entry<String, Emitter.Listener> entry : listenerMap.entrySet()) {
+            Log.d(TAG, "Registering listener for event: " + entry.getKey());
             socket.on(entry.getKey(), entry.getValue());
         }
 
@@ -177,9 +209,13 @@ public class SocketManager {
      * @param listener The listener to invoke when the event is received
      */
     public void addListener(String event, final Emitter.Listener listener) {
+        Log.d(TAG, "Adding listener for event: " + event);
         listenerMap.put(event, listener);
         if (socket != null) {
+            Log.d(TAG, "Registering listener on socket for event: " + event);
             socket.on(event, listener);
+        } else {
+            Log.w(TAG, "Socket is null, listener will be registered when socket connects for event: " + event);
         }
     }
 
