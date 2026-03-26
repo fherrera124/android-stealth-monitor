@@ -17,7 +17,7 @@ import android.os.Looper;
 /**
  * Callback interface for screenshot capture result.
  */
-interface ScreenshotCallback {
+public interface ScreenshotCallback {
     void onSuccess(byte[] imageData);
     void onError(String errorMessage);
 }
