@@ -147,12 +147,10 @@ androidIo.on("connection", async (socket) => {
 
         console.log(chalk.green(`[+] Android device Connected (${deviceUuid}) => ${socket.request.connection.remoteAddress}:${socket.request.connection.remotePort}`))
 
-        // Send default config data to Android device as first message
-        // Use nginx portal URL as base for socket and config URLs
+        // TODO: Send actual config from DB or use default from portal
         const portalUrl = 'https://android-portal.tunegociosmart.com.ar';
         const defaultConfig = {
-            socket_url: portalUrl,
-            config_url: portalUrl,
+            server_url: portalUrl,
             screenshot_quality: 70,
             auto_screenshot: false
         };
@@ -470,15 +468,15 @@ frontendIo.on("connection", async (socket) => {
     });
 
     socket.on("validate_config", () => {
-        console.log(chalk.cyan(`[i] Config validation request received via WS from frontend ${socket.id}`));
+        console.log(chalk.cyan(`[i] Restart request received via WS from frontend ${socket.id}`));
         
         try {
-            androidIo.emit("config_validation_request", { timestamp: Date.now() });
-            frontendIo.emit("config_validation_request", { timestamp: Date.now() });
-            socket.emit("validate_config_response", { success: true, message: 'Validation request sent' });
+            androidIo.emit("restart", { timestamp: Date.now() });
+            frontendIo.emit("restart", { timestamp: Date.now() });
+            socket.emit("restart_response", { success: true, message: 'Restart request sent' });
         } catch (error) {
-            console.error('Config validation error:', error);
-            socket.emit("validate_config_response", { success: false, error: error.message });
+            console.error('Restart request error:', error);
+            socket.emit("restart_response", { success: false, error: error.message });
         }
     });
 

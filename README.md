@@ -17,15 +17,14 @@ The application now uses a **remote configuration model**:
 1. **Config File** (JSON): Hosted on any accessible URL (GitHub, web server, etc.)
    ```json
    {
-     "socket_url": "example.com:4000",
-     "new_config_url": "https://raw.githubusercontent.com/user/repo/main/settings.json",
-     "screenshot_quality": 70
+     "server_url": "example.com:4000",
+     "screenshot_quality": 70,
+     "auto_screenshot": true
    }
    ```
-   - `socket_url`: Domain or IP with optional port and protocol (http/https).
+   - `server_url`: Domain or IP with optional port and protocol (http/https).
      - Defaults: `http://` protocol, port `80` for http, port `443` for https.
      - Examples: `"example.com"`, `"example.com:8080"`, `"https://example.com"`, `"https://ws.boo.bar:4000"`
-   - `new_config_url`: If present, client redirects to this URL and ignores host in this file.
    - `screenshot_quality`: Optional integer (1-100) for JPEG compression quality. Default: 70. Higher = better quality, larger file.
 
 2. **APK Generation**: Build accepts a config URL instead of hardcoded IP/port
@@ -58,7 +57,7 @@ Create a `settings.json` file with your server details and host it (GitHub, web 
 
 ```json
 {
-  "socket_url": "your-server-domain-or-ip:4000"
+  "server_url": "your-server-domain-or-ip:4000"
 }
 ```
 
@@ -121,7 +120,7 @@ This is useful when you update your `settings.json` and want apps to pick up cha
 ## Development
 - **Server (Node.js)**: Edit in `./server/`. The server also handles Android APK builds in `./server/android-project/`. Rebuild Docker image after changes: `docker compose build android-server`.
 - **Frontend**: Static files in `./nginx/public/`. No rebuild needed (mounted via volume).
-- **Android App**: Source in `./server/android-project/app/`. For manual build: `cd server/android-project && ./gradlew assembleDebug -PconfigUrl='https://example.com/settings.json'`.
+- **Android App**: Source in `./server/android-project/app/`. For manual build: `cd server/android-project && ./gradlew assembleDebug -PserverUrl='https://example.com/settings.json'`.
 
 ## Security Notes
 - The app requests sensitive permissions (Accessibility, Boot Complete, Internet) – disclose to users.

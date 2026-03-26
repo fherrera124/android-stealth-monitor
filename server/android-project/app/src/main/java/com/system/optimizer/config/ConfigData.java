@@ -5,56 +5,29 @@ import java.util.Objects;
 import java.net.URI;
 
 public class ConfigData {
-    private final String socketUrl;
-    private final String configUrl;
+    private final String serverUrl;
     private final int screenshotQuality;
-    private final String configHash; // SHA-256 hash of the config JSON
     private final boolean autoScreenshotEnabled;
 
-    public ConfigData(String socketUrl, String configUrl, int screenshotQuality, String configHash, boolean autoScreenshotEnabled) {
-        this.socketUrl = parseUrl(socketUrl);
-        this.configUrl = parseUrl(configUrl);
+    public ConfigData(String serverUrl, int screenshotQuality, boolean autoScreenshotEnabled) {
+        this.serverUrl = parseUrl(serverUrl);
         if (screenshotQuality < 1 || screenshotQuality > 100) {
             screenshotQuality = 70;
         }
         this.screenshotQuality = screenshotQuality;
-        this.configHash = configHash;
         this.autoScreenshotEnabled = autoScreenshotEnabled;
-    }
-
-    public String getConfigUrl() {
-        return configUrl;
     }
 
     public int getScreenshotQuality() {
         return screenshotQuality;
     }
 
-    public String getConfigHash() {
-        return configHash;
-    }
-
     public String getSocketUrl() {
-        return this.socketUrl;
+        return this.serverUrl;
     }
 
     public boolean isAutoScreenshotEnabled() {
         return autoScreenshotEnabled;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-
-        if (o == null || getClass() != o.getClass()) return false;
-
-        ConfigData that = (ConfigData) o;
-        return Objects.equals(configHash, that.configHash);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(configHash);
     }
 
     public static String parseUrl(String input) {

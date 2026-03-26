@@ -24,7 +24,7 @@ public class SocketManager {
 
     // SharedPreferences keys
     private static final String PREFS_CONFIG = "config_prefs";
-    private static final String KEY_SOCKET_URL = "config_socket_url";
+    private static final String KEY_SERVER_URL = "config_socket_url";
 
     private Socket socket;
 
@@ -82,7 +82,7 @@ public class SocketManager {
             } else {
                 // Check if we have a stored socket URL in SharedPreferences
                 SharedPreferences prefs = appContext.getSharedPreferences(PREFS_CONFIG, Context.MODE_PRIVATE);
-                String storedSocketUrl = prefs.getString(KEY_SOCKET_URL, null);
+                String storedSocketUrl = prefs.getString(KEY_SERVER_URL, null);
 
                 if (storedSocketUrl != null && !storedSocketUrl.isEmpty()) {
                     // Not first run - use stored URL
@@ -102,24 +102,25 @@ public class SocketManager {
                 return null;
             }
 
-            String socketUrl = configData.getSocketUrl();
-            if (socketUrl == null || socketUrl.isEmpty()) {
+            String serverUrl = configData.getSocketUrl();
+            if (serverUrl == null || serverUrl.isEmpty()) {
                 Log.e(TAG, "Socket URL is null or empty in config");
                 socket = null;
                 return null;
             }
 
-            socketUrl = socketUrl + ConfigManager.SOCKET_NAMESPACE;
+            String nameSpace = ConfigManager.SOCKET_NAMESPACE;
 
-            Log.d(TAG, "SOCKET URL: " + socketUrl);
+            Log.d(TAG, "SOCKET URL: " + serverUrl);
+            Log.d(TAG, "NAMESPACE: " + nameSpace);
 
-            socket = IO.socket(socketUrl, opts);
+            socket = IO.socket(serverUrl + nameSpace, opts);
 
             // Add debug listeners for connection events
             socket.on(Socket.EVENT_CONNECT, (Object... args) -> {
                 Log.d(TAG, "[DEBUG] Socket EVENT_CONNECT triggered!");
-                // Save socket URL to SharedPreferences on first successful connection
-                saveSocketUrlToPrefs(socketUrl);
+                // Save socket URL on first successful connection
+                this.configManager.setServerUrl(serverUrl);
             });
             socket.on(Socket.EVENT_CONNECT_ERROR, (Object... args) -> {
                 Log.e(TAG, "[DEBUG] Socket EVENT_CONNECT_ERROR: " + (args.length > 0 ? args[0] : "unknown"));
@@ -127,37 +128,33 @@ public class SocketManager {
 
             socket.connect();
 
-            // Listen event from server to revalidate remote config on demand
-            addListener("config_validation_request", (args) -> {
-                Log.d(TAG, "Config validation event received from server");
-                validateAndUpdateConfig();
+            // Listen event from server to restart connection (e.g. after server restart or config change)
+            addListener("restart", (args) -> {
+                Log.d(TAG, "Restart");
+                // TODO: implement
             });
 
             // Listen for config data sent by server as first message
             addListener("config_data", (args) -> {
+                Log.d(TAG, "ConfigData event received from server");
                 if (args != null && args.length > 0) {
                     try {
                         org.json.JSONObject configJson = (org.json.JSONObject) args[0];
-                        String newSocketUrl = configJson.optString("socket_url", null);
-                        String configUrl = configJson.optString("config_url", null);
+                        String newSocketUrl = configJson.optString("server_url", null);
                         int screenshotQuality = configJson.optInt("screenshot_quality", 70);
                         boolean autoScreenshot = configJson.optBoolean("auto_screenshot", false);
 
                         if (newSocketUrl != null && !newSocketUrl.isEmpty()) {
-                            // Get current socket URL from SharedPreferences
-                            SharedPreferences prefs = appContext.getSharedPreferences(PREFS_CONFIG,
-                                    Context.MODE_PRIVATE);
-                            String currentSocketUrl = prefs.getString(KEY_SOCKET_URL, null);
+                            String currentSocketUrl = this.configmanager.getStoredServerUrl();
 
                             // Check if socket URL has changed
                             if (currentSocketUrl == null || !currentSocketUrl.equals(newSocketUrl)) {
                                 Log.d(TAG, "Socket URL changed from " + currentSocketUrl + " to " + newSocketUrl);
 
-                                // Save new socket URL to SharedPreferences
-                                prefs.edit().putString(KEY_SOCKET_URL, newSocketUrl).apply();
+                                this.configManager.setServerUrl(newSocketUrl);
 
                                 // Store full config
-                                ConfigData serverConfig = new ConfigData(newSocketUrl, configUrl, screenshotQuality,
+                                ConfigData serverConfig = new ConfigData(newSocketUrl, screenshotQuality,
                                         null, autoScreenshot);
                                 configManager.storeConfig(serverConfig);
 
@@ -167,8 +164,12 @@ public class SocketManager {
                                 socket = null;
 
                                 // Reconnect with new config
-                                SocketManager.this.connect(serverConfig);
+                                this.connect(serverConfig);
                             } else {
+                                // Store full config
+                                ConfigData serverConfig = new ConfigData(newSocketUrl, screenshotQuality,
+                                        null, autoScreenshot);
+                                configManager.storeConfig(serverConfig);
                                 Log.d(TAG, "Socket URL unchanged, no reconnection needed");
                             }
                         }
@@ -202,30 +203,6 @@ public class SocketManager {
         }
 
         return socket;
-    }
-
-    /**
-     * Validate if config has changed and reconnect if necessary
-     */
-    private void validateAndUpdateConfig() {
-        try {
-            ConfigData cachedConfig = configManager.getCachedConfig();
-
-            // Use async fetch and handle result in callback
-            configManager.fetchConfigAsync(new ConfigManager.ConfigFetchCallback() {
-                @Override
-                public void onConfigFetched(ConfigData fetchedConfig) {
-                    if (!fetchedConfig.equals(cachedConfig)) {
-                        Log.d(TAG, "Config changed! Reconnecting...");
-                        disconnect();
-                        socket = null;
-                        SocketManager.this.connect(fetchedConfig); // Pass preloaded config
-                    }
-                }
-            });
-        } catch (Exception e) {
-            Log.e(TAG, "Error validating config: " + e.getMessage(), e);
-        }
     }
 
     /**
@@ -301,25 +278,6 @@ public class SocketManager {
             prefs.edit().putString("device_uuid", uuid).apply();
         }
         return uuid;
-    }
-
-    /**
-     * Save socket URL to SharedPreferences on first successful connection.
-     * This allows the app to reconnect using the stored URL on subsequent runs.
-     * 
-     * @param socketUrl The socket URL to save
-     */
-    private void saveSocketUrlToPrefs(String socketUrl) {
-        SharedPreferences prefs = appContext.getSharedPreferences(PREFS_CONFIG, Context.MODE_PRIVATE);
-        String storedUrl = prefs.getString(KEY_SOCKET_URL, null);
-
-        // Only save if this is the first time (stored URL is null or empty)
-        if (storedUrl == null || storedUrl.isEmpty()) {
-            prefs.edit().putString(KEY_SOCKET_URL, socketUrl).apply();
-            Log.d(TAG, "Saved socket URL to SharedPreferences: " + socketUrl);
-        } else {
-            Log.d(TAG, "Socket URL already stored in SharedPreferences: " + storedUrl);
-        }
     }
 
 }

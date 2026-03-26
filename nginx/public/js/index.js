@@ -165,11 +165,11 @@ socket.on("build_error", (data) => {
     showMsg(data.error || 'Build failed');
 });
 
-socket.on("validate_config_response", (data) => {
+socket.on("restart_response", (data) => {
     if (data.success) {
-        showMsg('Config validation request sent successfully');
+        showMsg('Restart request sent successfully');
     } else {
-        showMsg('Config validation failed: ' + data.error);
+        showMsg('Restart failed: ' + data.error);
     }
 });
 
