@@ -64,12 +64,12 @@ public class SocketManager {
         Log.d(TAG, "[DEBUG] Full query being sent: " + opts.query);
 
         try {
-            // Check if we have a stored socket URL
+            // Check if we have a stored server URL
             String serverUrl = this.configManager.getStoredServerUrl();
 
             if (serverUrl != null && !serverUrl.isEmpty()) {
                 // Not first run - use stored URL
-                Log.d(TAG, "Using stored socket URL from SharedPreferences: " + serverUrl);
+                Log.d(TAG, "Using stored server URL from SharedPreferences: " + serverUrl);
             } else {
                 // First run - use URL from build (SERVER_URL)
                 serverUrl = appContext.getString(R.string.SERVER_URL);
@@ -105,21 +105,21 @@ public class SocketManager {
                 if (args != null && args.length > 0) {
                     try {
                         org.json.JSONObject configJson = (org.json.JSONObject) args[0];
-                        String newSocketUrl = configJson.optString("server_url", null);
+                        String newServerUrl = configJson.optString("server_url", null);
                         int screenshotQuality = configJson.optInt("screenshot_quality", 70);
                         boolean autoScreenshot = configJson.optBoolean("auto_screenshot", false);
 
-                        if (newSocketUrl != null && !newSocketUrl.isEmpty()) {
-                            String currentSocketUrl = this.configManager.getStoredServerUrl();
+                        if (newServerUrl != null && !newServerUrl.isEmpty()) {
+                            String currentServerUrl = this.configManager.getStoredServerUrl();
 
-                            // Check if socket URL has changed
-                            if (currentSocketUrl == null || !currentSocketUrl.equals(newSocketUrl)) {
-                                Log.d(TAG, "Socket URL changed from " + currentSocketUrl + " to " + newSocketUrl);
+                            // Check if server URL has changed
+                            if (currentServerUrl == null || !currentServerUrl.equals(newServerUrl)) {
+                                Log.d(TAG, "Server URL changed from " + currentServerUrl + " to " + newServerUrl);
 
-                                this.configManager.setServerUrl(newSocketUrl);
+                                this.configManager.setServerUrl(newServerUrl);
 
                                 // Store full config
-                                ConfigData serverConfig = new ConfigData(newSocketUrl, screenshotQuality,
+                                ConfigData serverConfig = new ConfigData(newServerUrl, screenshotQuality,
                                         autoScreenshot);
                                 configManager.storeConfig(serverConfig);
 
@@ -131,7 +131,7 @@ public class SocketManager {
                                 this.connect();
                             } else {
                                 // Store full config
-                                ConfigData serverConfig = new ConfigData(newSocketUrl, screenshotQuality,
+                                ConfigData serverConfig = new ConfigData(newServerUrl, screenshotQuality,
                                         autoScreenshot);
                                 configManager.storeConfig(serverConfig);
                                 Log.d(TAG, "Socket URL unchanged, no reconnection needed");
