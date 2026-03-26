@@ -1,13 +1,11 @@
 FROM thyrlian/android-sdk:latest
 
-# Install Node.js for the server and accept Android SDK licenses
+# Install Node.js for the server
 RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
 
-# Accept Android SDK licenses
-RUN yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-
-# Install required Build Tools
-RUN $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0" "platforms;android-34"
+# Accept Android SDK licenses and install required components
+RUN yes | /opt/android-sdk/tools/bin/sdkmanager --licenses || true
+RUN /opt/android-sdk/tools/bin/sdkmanager "build-tools;34.0.0" "platforms;android-34"
 
 WORKDIR /app
 
