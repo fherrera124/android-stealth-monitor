@@ -9,20 +9,12 @@ services:
       - ./screenshots:/app/screenshots
       - ./server/android-project:/android-project
       - ./server/android-project/gradle:/root/.gradle
-    ports:
-      - "4000:4000"
     environment:
       - NODE_ENV=production
       - ANDROID_HOME=/opt/android-sdk
     restart: unless-stopped
     networks:
       - internal
-      - default
-      - proxy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.android-server.tls=true"
-      - "traefik.http.services.android-server.loadbalancer.server.port=4000"
 
   android-portal:
     image: nginx:alpine
