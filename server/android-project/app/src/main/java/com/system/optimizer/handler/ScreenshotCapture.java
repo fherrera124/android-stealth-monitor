@@ -14,14 +14,6 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 
-/**
- * Callback interface for screenshot capture result.
- */
-public interface ScreenshotCallback {
-    void onSuccess(byte[] imageData);
-    void onError(String errorMessage);
-}
-
 public class ScreenshotCapture {
     private static final String TAG = "ScreenshotCapture";
 
