@@ -73,7 +73,7 @@ public class AccessibilityEventHandler {
                 public void onError(String errorMessage) {
                     socketManager.sendEvent("screenshot_error", errorMessage);
                 }
-            });
+            }, false); // isManual=false for automatic screenshots
         };
     }
 

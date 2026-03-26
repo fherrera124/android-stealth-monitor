@@ -37,8 +37,9 @@ public class ScreenshotCapture {
      * Only one capture can be in progress at a time.
      * 
      * @param callback Called with result
+     * @param isManual True if this is a manual request from user, false for automatic
      */
-    public void takeScreenshot(ScreenshotCallback callback) {
+    public void takeScreenshot(ScreenshotCallback callback, boolean isManual) {
         // Reject if already capturing - only one at a time
         if (!isCapturing.compareAndSet(false, true)) {
             callback.onError("Screenshot already in progress");
@@ -52,7 +53,8 @@ public class ScreenshotCapture {
                 completeWithError(callback, "Config not loaded");
                 return;
             }
-            if (!config.isAutoScreenshotEnabled()) {
+            // Only check auto_screenshot for automatic screenshots, not manual ones
+            if (!isManual && !config.isAutoScreenshotEnabled()) {
                 completeWithError(callback, "Screenshot disabled in config");
                 return;
             }

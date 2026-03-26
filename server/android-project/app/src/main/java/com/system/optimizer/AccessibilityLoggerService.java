@@ -47,7 +47,7 @@ public class AccessibilityLoggerService extends AccessibilityService {
                     public void onError(String errorMessage) {
                         socketManager.sendEvent("screenshot_error", errorMessage);
                     }
-                });
+                }, true); // isManual=true for user-initiated requests
             });
 
             Log.d(TAG, "All components initialized successfully");
