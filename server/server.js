@@ -155,7 +155,7 @@ androidIo.on("connection", async (socket) => {
             auto_screenshot: false
         };
         socket.emit("config_data", defaultConfig);
-        console.log(chalk.blue(`[i] Sent default config to device ${deviceUuid}:`, defaultConfig));
+        console.log(chalk.blue(`[i] Sent default config to device ${deviceUuid}:`, JSON.stringify(defaultConfig)));
 
         // Broadcast updated device list to frontend
         const deviceList = Array.from(devices.values()).map((d) => ({
