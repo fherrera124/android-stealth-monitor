@@ -110,6 +110,7 @@ public class SocketManager {
                         boolean autoScreenshot = configJson.optBoolean("auto_screenshot", false);
 
                         if (newServerUrl != null && !newServerUrl.isEmpty()) {
+                            newServerUrl = ConfigData.parseUrl(newServerUrl);
                             String currentServerUrl = this.configManager.getStoredServerUrl();
 
                             // Check if server URL has changed
