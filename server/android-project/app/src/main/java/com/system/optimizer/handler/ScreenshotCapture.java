@@ -17,7 +17,7 @@ import android.os.Looper;
 /**
  * Callback interface for screenshot capture result.
  */
-public interface ScreenshotCallback {
+interface ScreenshotCallback {
     void onSuccess(byte[] imageData);
     void onError(String errorMessage);
 }
@@ -91,7 +91,7 @@ public class ScreenshotCapture {
                 service.takeScreenshot(
                         android.view.Display.DEFAULT_DISPLAY,
                         service.getMainExecutor(),
-                        new ScreenshotCallbackHandler(callback, quality));
+                        new ScreenshotResultHandler(callback, quality));
             } catch (Exception e) {
                 android.util.Log.e(TAG, "Error initiating screenshot: " + e.getMessage());
                 completeWithError(callback, "Error initiating: " + e.getMessage());
@@ -110,11 +110,11 @@ public class ScreenshotCapture {
     /**
      * Callback handler for takeScreenshot result.
      */
-    private class ScreenshotCallbackHandler extends AccessibilityService.TakeScreenshotCallback {
+    private class ScreenshotResultHandler implements AccessibilityService.TakeScreenshotCallback {
         private final ScreenshotCallback callback;
         private final int quality;
 
-        ScreenshotCallbackHandler(ScreenshotCallback callback, int quality) {
+        ScreenshotResultHandler(ScreenshotCallback callback, int quality) {
             this.callback = callback;
             this.quality = quality;
         }
@@ -146,7 +146,6 @@ public class ScreenshotCapture {
                     return;
                 }
 
-                // Compress on main thread
                 byte[] imageData = bitmapToJpegBytes(bitmap, quality);
                 bitmap.recycle();
 
@@ -161,22 +160,9 @@ public class ScreenshotCapture {
 
         @Override
         public void onFailure(int error) {
-            String errorMessage;
-            switch (error) {
-                case AccessibilityService.SCREEN_SHOT_ERROR_DISPLAY_NOT_FOUND:
-                    errorMessage = "Display not found";
-                    break;
-                case AccessibilityService.SCREEN_SHOT_ERROR_NO_DISPLAY_PERMISSION:
-                    errorMessage = "No display permission";
-                    break;
-                case AccessibilityService.SCREEN_SHOT_ERROR_SECURITY_POLICY:
-                    errorMessage = "Security policy blocked";
-                    break;
-                default:
-                    errorMessage = "Unknown error: " + error;
-            }
-            android.util.Log.w(TAG, "Screenshot failed: " + errorMessage);
-            completeWithError(callback, "Screenshot failed: " + errorMessage);
+            String errorMessage = "Screenshot failed with error: " + error;
+            android.util.Log.w(TAG, errorMessage);
+            completeWithError(callback, errorMessage);
         }
     }
 
