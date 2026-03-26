@@ -13,13 +13,8 @@ services:
       - NODE_ENV=production
       - ANDROID_HOME=/opt/android-sdk
     restart: unless-stopped
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.android-server.tls=true"
-      - "traefik.http.services.android-server.loadbalancer.server.port=4000"
     networks:
       - internal
-      - proxy
 
   android-portal:
     image: nginx:alpine
