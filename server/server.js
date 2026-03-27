@@ -153,7 +153,7 @@ console.log(`Listening for android devices on http://0.0.0.0:${serverPort}/`)
 // Socket io Connection for Android devices
 const androidIo = io.of('/android');
 
-androidIo.on("connection", async (socket) => {
+io.on("connection", async (socket) => {
     console.log(chalk.cyan(`[i] New connection attempt from ${socket.handshake.address}`));
     
     try {
