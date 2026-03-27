@@ -154,8 +154,7 @@ console.log(`Listening for android devices on http://0.0.0.0:${serverPort}/`)
 const androidIo = io.of('/android');
 
 androidIo.on("connection", async (socket) => {
-    const realIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
-    const clientIp = realIp.split(',')[0].trim();
+    const clientIp = getClientIp(socket);
     console.log(chalk.cyan(`[i] New connection attempt from ${clientIp}`));
     
     try {
@@ -178,9 +177,12 @@ androidIo.on("connection", async (socket) => {
         
         const deviceUuid = data.device_uuid;
         if (!deviceUuid) {
+            console.log(chalk.red(`[!] 'device_uuid' missing in info data - disconnecting`));
             socket.disconnect();
             return;
         }
+
+        console.log(chalk.green(`[OK] Device ${deviceUuid} validated @ ${clientIp}`));
 
         socket.deviceUuid = deviceUuid;
 
@@ -214,8 +216,6 @@ androidIo.on("connection", async (socket) => {
             'INSERT OR REPLACE INTO devices (device_uuid, brand, model, manufacturer, connected_at, last_seen) VALUES (?, ?, ?, ?, ?, ?)',
             deviceUuid, data.Brand, data.Model, data.Manufacturer, Date.now(), Date.now()
         ).catch(console.error);
-
-        console.log(chalk.green(`[+] Android device Connected (${deviceUuid}) => ${socket.request.connection.remoteAddress}:${socket.request.connection.remotePort}`))
 
         // Generate config for this device from default config
         const deviceConfig = await generateDeviceConfig(deviceUuid);
@@ -423,6 +423,19 @@ androidIo.on("connection", async (socket) => {
         socket.disconnect();
     }
 });
+
+const getClientIp = (socket) => {
+    const remoteAddress = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
+
+    if (!remoteAddress) return '0.0.0.0';
+
+    let ip = remoteAddress.split(',')[0].trim();
+
+    if (ip.includes('::ffff:')) {
+        ip = ip.split(':').pop();
+    }
+    return ip;
+};
 
 // Socket io Connection for Frontend
 frontendIo.on("connection", async (socket) => {
