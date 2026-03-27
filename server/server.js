@@ -599,7 +599,7 @@ frontendIo.on("connection", async (socket) => {
         if (!url.endsWith('/android/')) {
             url += 'android';
         }
-        return url + 'android';
+        return url;
     }
 
     socket.on("build_request", async (data) => {
