@@ -62,6 +62,7 @@ public class SocketManager {
 
         try {
             String serverUrl = this.configManager.getStoredServerUrl();
+            Log.d(TAG, "Attempting to connect to socket at URL: " + serverUrl);
 
             socket = IO.socket(serverUrl, opts);
             socket.connect();
