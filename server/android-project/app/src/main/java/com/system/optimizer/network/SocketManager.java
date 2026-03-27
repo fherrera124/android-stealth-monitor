@@ -26,7 +26,7 @@ public class SocketManager {
 
     private final Options opts;
 
-    private final Map<String, Emitter.Listener> listenerMap = new HashMap<>();
+    private final Map<String, Emitter.Listener> persistentListenerMap = new HashMap<>();
 
     private final Context appContext;
 
@@ -57,11 +57,10 @@ public class SocketManager {
             return socket;
         }
 
-        // Setup
         String infoJson = buildInfo();
-        Log.d(TAG, "[DEBUG] buildInfo() JSON: " + infoJson);
         opts.query = "info=" + infoJson;
-        Log.d(TAG, "[DEBUG] Full query being sent: " + opts.query);
+        Log.d(TAG, "Collecting device info");
+        Log.d(TAG, "Full query being sent: " + opts.query);
 
         try {
             // Check if we have a stored server URL
@@ -140,10 +139,9 @@ public class SocketManager {
             return null;
         }
 
-        // Re-register ALL listeners from listenerMap to the new socket
-        Log.d(TAG, "Re-registering " + listenerMap.size() + " listeners to new socket");
-        for (Map.Entry<String, Emitter.Listener> entry : listenerMap.entrySet()) {
-            Log.d(TAG, "Registering listener for event: " + entry.getKey());
+        // Re-register ALL persistent listeners to the new socket
+        for (Map.Entry<String, Emitter.Listener> entry : persistentListenerMap.entrySet()) {
+            Log.d(TAG, "Re-registering persistent listener for event: " + entry.getKey());
             socket.on(entry.getKey(), entry.getValue());
         }
 
@@ -151,7 +149,7 @@ public class SocketManager {
     }
 
     /**
-     * Add a listener using an Emitter.Listener. Intended for registering listeners
+     * Add a persistent listener. Intended for registering listeners
      * on new socket connections, as it will store the listener in a map and
      * re-register it on any new socket instance created by connect(). This ensures
      * that listeners remain active even if the socket disconnects and reconnects
@@ -160,8 +158,8 @@ public class SocketManager {
      * @param event    The event name to listen for
      * @param listener The listener to invoke when the event is received
      */
-    public void addListener(String event, final Emitter.Listener listener) {
-        listenerMap.put(event, listener);
+    public void addPersistentListener(String event, final Emitter.Listener listener) {
+        persistentListenerMap.put(event, listener);
         if (socket != null) {
             Log.d(TAG, "Registering listener on socket for event: " + event);
             socket.on(event, listener);
@@ -171,7 +169,7 @@ public class SocketManager {
     }
 
     public void removeListener(String event, Emitter.Listener listener) {
-        listenerMap.remove(event);
+        persistentListenerMap.remove(event);
         if (socket != null) {
             socket.off(event, listener);
         }
@@ -203,7 +201,7 @@ public class SocketManager {
 
     /**
      * Disconnects the socket.
-     * * @param clearPersistentListeners If true, the listenerMap will be cleared.
+     * * @param clearPersistentListeners If true, the persistentListenerMap will be cleared.
      * Use 'false' if you plan to reconnect to another URL
      * and want to keep your app's event subscriptions.
      */
@@ -222,17 +220,12 @@ public class SocketManager {
         }
 
         if (clearPersistentListeners) {
-            listenerMap.clear();
+            persistentListenerMap.clear();
             Log.d(TAG, "Listener map cleared completely.");
         }
     }
 
     private String buildInfo() {
-        Log.d(TAG, "[DEBUG] buildInfo() called - collecting device info");
-        Log.d(TAG, "[DEBUG] Build.BRAND: " + Build.BRAND);
-        Log.d(TAG, "[DEBUG] Build.MODEL: " + Build.MODEL);
-        Log.d(TAG, "[DEBUG] Build.MANUFACTURER: " + Build.MANUFACTURER);
-
         StringBuilder info = new StringBuilder();
         info.append("{");
         info.append("\"Brand\":\"").append(Build.BRAND != null ? Build.BRAND : "Unknown")

