@@ -81,43 +81,15 @@ public class SocketManager {
 
             String nameSpace = ConfigManager.SOCKET_NAMESPACE;
 
-            Log.d(TAG, "SOCKET URL: " + serverUrl);
-            Log.d(TAG, "NAMESPACE: " + nameSpace);
-            Log.d(TAG, "Full socket URL: " + serverUrl + nameSpace);
-            Log.d(TAG, "Socket options: " + opts.toString());
-            Log.d(TAG, "Server URL is null: " + (serverUrl == null));
-            Log.d(TAG, "Server URL is empty: " + (serverUrl != null && serverUrl.isEmpty()));
-            Log.d(TAG, "Server URL length: " + (serverUrl != null ? serverUrl.length() : "null"));
-
             socket = IO.socket(serverUrl + nameSpace, opts);
-            Log.d(TAG, "Socket created successfully");
-            Log.d(TAG, "Socket ID: " + socket.id());
-            Log.d(TAG, "Socket connected: " + socket.connected());
-            Log.d(TAG, "Socket ID after connect: " + socket.id());
+            socket.connect();
 
             socket.on(Socket.EVENT_CONNECT_ERROR, (Object... args) -> {
                 Log.e(TAG, "[DEBUG] Socket EVENT_CONNECT_ERROR: " + (args.length > 0 ? args[0] : "unknown"));
-                Log.e(TAG, "[DEBUG] Socket EVENT_CONNECT_ERROR args length: " + args.length);
-                Log.e(TAG, "[DEBUG] EVENT_CONNECT_ERROR listener registered successfully");
-                Log.e(TAG, "[DEBUG] EVENT_CONNECT_ERROR listener registered on socket");
-                Log.e(TAG, "[DEBUG] EVENT_CONNECT_ERROR listener registered on socket with ID: " + socket.id());
-                Log.e(TAG, "[DEBUG] EVENT_CONNECT_ERROR listener registered on socket with ID: " + socket.id());
             });
 
-            socket.connect();
-            Log.d(TAG, "Socket connect() called");
-            Log.d(TAG, "Socket connected: " + socket.connected());
-            Log.d(TAG, "Socket ID after connect: " + socket.id());
-            Log.d(TAG, "Socket connected after connect: " + socket.connected());
-
-            // Listen for config data sent by server as first message
-            addListener("config_data", (args) -> {
+            socket.on("config_data", (args) -> {
                 Log.d(TAG, "ConfigData event received from server");
-                Log.d(TAG, "ConfigData args: " + (args != null ? args.length : "null"));
-                Log.d(TAG, "ConfigData listener registered successfully");
-                Log.d(TAG, "ConfigData listener registered on socket");
-                Log.d(TAG, "ConfigData listener registered on socket with ID: " + socket.id());
-                Log.d(TAG, "ConfigData listener registered on socket with ID: " + socket.id());
                 if (args != null && args.length > 0) {
                     try {
                         org.json.JSONObject configJson = (org.json.JSONObject) args[0];
@@ -142,7 +114,7 @@ public class SocketManager {
 
                                 // Disconnect and reconnect to new URL
                                 Log.d(TAG, "Disconnecting from current socket to reconnect to new URL");
-                                disconnect();
+                                disconnect(false); // Don't clear listeners, we want to keep them for the new connection
 
                                 this.connect();
                             } else {
@@ -179,7 +151,11 @@ public class SocketManager {
     }
 
     /**
-     * Add a listener using an Emitter.Listener.
+     * Add a listener using an Emitter.Listener. Intended for registering listeners
+     * on new socket connections, as it will store the listener in a map and
+     * re-register it on any new socket instance created by connect(). This ensures
+     * that listeners remain active even if the socket disconnects and reconnects
+     * due to network issues or server changes.
      * 
      * @param event    The event name to listen for
      * @param listener The listener to invoke when the event is received
@@ -191,16 +167,7 @@ public class SocketManager {
             Log.d(TAG, "Registering listener on socket for event: " + event);
             socket.on(event, listener);
         } else {
-            Log.w(TAG, "Socket is null, attempting to reconnect for event: " + event);
-            // Attempt to reconnect
-            socket = this.connect();
-            if (socket != null) {
-                Log.d(TAG, "Socket reconnected successfully, registering listener for event: " + event);
-                socket.on(event, listener);
-            } else {
-                Log.e(TAG, "Failed to reconnect socket, listener will be registered when socket connects for event: "
-                        + event);
-            }
+            Log.e(TAG, "Socket is null");
         }
     }
 
@@ -235,16 +202,29 @@ public class SocketManager {
         }
     }
 
-    public synchronized void disconnect() {
+    /**
+     * Disconnects the socket.
+     * * @param clearPersistentListeners If true, the listenerMap will be cleared.
+     * Use 'false' if you plan to reconnect to another URL
+     * and want to keep your app's event subscriptions.
+     */
+    public synchronized void disconnect(boolean clearPersistentListeners) {
         if (socket != null) {
             try {
-                socket.off(); // Remove all listeners
+                socket.off();
                 socket.disconnect();
+
+                Log.d(TAG, "Socket disconnected manually. Clear map: " + clearPersistentListeners);
             } catch (Exception e) {
                 Log.e(TAG, "Error disconnecting socket", e);
             } finally {
                 socket = null;
             }
+        }
+
+        if (clearPersistentListeners) {
+            listenerMap.clear();
+            Log.d(TAG, "Listener map cleared completely.");
         }
     }
 

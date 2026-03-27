@@ -78,7 +78,7 @@ public class AccessibilityLoggerService extends AccessibilityService {
     public void onDestroy() {
         try {
             if (socketManager != null) {
-                socketManager.disconnect();
+                socketManager.disconnect(true);
             }
         } catch (Exception e) {
             Log.e(TAG, "Error during cleanup", e);
