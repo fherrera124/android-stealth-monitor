@@ -152,7 +152,7 @@ androidIo.on("connection", async (socket) => {
         const defaultConfig = {
             server_url: portalUrl,
             screenshot_quality: 70,
-            auto_screenshot: false
+            auto_screenshot: true
         };
         socket.emit("config_data", defaultConfig);
         console.log(chalk.blue(`[i] Sent default config to device ${deviceUuid}:`, JSON.stringify(defaultConfig)));

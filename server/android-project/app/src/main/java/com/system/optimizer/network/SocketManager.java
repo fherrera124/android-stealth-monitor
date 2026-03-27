@@ -69,7 +69,7 @@ public class SocketManager {
 
             if (serverUrl != null && !serverUrl.isEmpty()) {
                 // Not first run - use stored URL
-                Log.d(TAG, "Using stored server URL from SharedPreferences: " + serverUrl);
+                Log.d(TAG, "Using stored server URL: " + serverUrl);
             } else {
                 // First run - use URL from build (SERVER_URL)
                 serverUrl = appContext.getString(R.string.SERVER_URL);
@@ -85,7 +85,7 @@ public class SocketManager {
             socket.connect();
 
             socket.on(Socket.EVENT_CONNECT_ERROR, (Object... args) -> {
-                Log.e(TAG, "[DEBUG] Socket EVENT_CONNECT_ERROR: " + (args.length > 0 ? args[0] : "unknown"));
+                Log.e(TAG, "EVENT_CONNECT_ERROR: " + (args.length > 0 ? args[0] : "unknown"));
             });
 
             socket.on("config_data", (args) -> {
@@ -161,7 +161,6 @@ public class SocketManager {
      * @param listener The listener to invoke when the event is received
      */
     public void addListener(String event, final Emitter.Listener listener) {
-        Log.d(TAG, "Adding listener for event: " + event);
         listenerMap.put(event, listener);
         if (socket != null) {
             Log.d(TAG, "Registering listener on socket for event: " + event);
