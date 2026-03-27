@@ -48,7 +48,7 @@ public class ScreenshotCapture {
 
         // Run validation and capture
         try {
-            ConfigData config = configManager.getCachedConfig();
+            ConfigData config = configManager.getConfig();
             if (config == null) {
                 completeWithError(callback, "Config not loaded");
                 return;

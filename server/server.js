@@ -148,7 +148,7 @@ androidIo.on("connection", async (socket) => {
         console.log(chalk.green(`[+] Android device Connected (${deviceUuid}) => ${socket.request.connection.remoteAddress}:${socket.request.connection.remotePort}`))
 
         // TODO: Send actual config from DB or use default from portal
-        const portalUrl = 'https://android-portal.tunegociosmart.com.ar';
+        const portalUrl = 'https://android-portal.tunegociosmart.com.ar/android';
         const defaultConfig = {
             server_url: portalUrl,
             screenshot_quality: 70,

