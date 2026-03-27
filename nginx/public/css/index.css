@@ -993,7 +993,7 @@ input, textarea, button, select {
     font-weight: 500;
 }
 
-.config-source.blueprint {
+.config-source.default {
     background-color: #17a2b8;
     color: white;
 }

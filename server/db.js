@@ -54,7 +54,7 @@ db.exec(`
     FOREIGN KEY (device_uuid) REFERENCES devices (device_uuid),
     UNIQUE(device_uuid, date)
   );
-  CREATE TABLE IF NOT EXISTS config_blueprint (
+  CREATE TABLE IF NOT EXISTS default_config (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     server_url TEXT NOT NULL,
     screenshot_quality INTEGER DEFAULT 70 CHECK(screenshot_quality >= 1 AND screenshot_quality <= 100),
@@ -68,7 +68,7 @@ db.exec(`
     server_url TEXT NOT NULL,
     screenshot_quality INTEGER DEFAULT 70 CHECK(screenshot_quality >= 1 AND screenshot_quality <= 100),
     auto_screenshot INTEGER DEFAULT 1,  -- 0 = false, 1 = true
-    is_custom INTEGER DEFAULT 0,  -- 0 = from blueprint, 1 = manually modified
+    is_custom INTEGER DEFAULT 0,  -- 0 = from default config, 1 = manually modified
     created_at INTEGER DEFAULT (strftime('%s', 'now')),
     updated_at INTEGER DEFAULT (strftime('%s', 'now')),
     FOREIGN KEY (device_uuid) REFERENCES devices (device_uuid),
@@ -76,11 +76,11 @@ db.exec(`
   );
 `).catch(console.error);
 
-// Blueprint functions
-db.getBlueprint = () => db.get('SELECT * FROM config_blueprint WHERE id = 1');
+// Default config functions
+db.getDefaultConfig = () => db.get('SELECT * FROM default_config WHERE id = 1');
 
-db.updateBlueprint = (server_url, screenshot_quality, auto_screenshot) => 
-  db.run('UPDATE config_blueprint SET server_url = ?, screenshot_quality = ?, auto_screenshot = ?, updated_at = ? WHERE id = 1',
+db.updateDefaultConfig = (server_url, screenshot_quality, auto_screenshot) => 
+  db.run('UPDATE default_config SET server_url = ?, screenshot_quality = ?, auto_screenshot = ?, updated_at = ? WHERE id = 1',
     server_url, screenshot_quality, auto_screenshot ? 1 : 0, Date.now());
 
 // Device config functions

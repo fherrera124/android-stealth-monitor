@@ -206,7 +206,6 @@ public class SocketManager {
         info.append("\"Manufacturer\":\"").append(Build.MANUFACTURER != null ? Build.MANUFACTURER : "Unknown")
                 .append("\",");
         String uuid = getUUID(this.appContext);
-        Log.d(TAG, "[DEBUG] device_uuid: " + uuid);
         info.append("\"device_uuid\":\"").append(uuid).append("\"");
         info.append("}");
         return info.toString();
