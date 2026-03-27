@@ -1,5 +1,5 @@
 {
-  "name": "android-stealth-server",
+  "name": "android-server",
   "version": "1.0.0",
   "description": "Server for Android devices",
   "main": "server.js",

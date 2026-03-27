@@ -7,6 +7,8 @@ const output = document.getElementById("output")
 let currentDevice = ""
 let previousDevice = ""
 let currentScreenshots = []
+let currentBlueprint = null
+let currentDeviceConfig = null
 
 document.querySelectorAll("form").forEach(e => {
     e.addEventListener("submit", i => i.preventDefault())
@@ -23,6 +25,10 @@ async function getInfo(id) {
 
     if (id != "None") {
         socket.emit("get_device_info", id);
+        // Load device config if config tab is active
+        if (document.getElementById('config-tab').classList.contains('active')) {
+            loadDeviceConfig();
+        }
     } else {
         currentDevice = "";
         previousDevice = "";
@@ -32,6 +38,8 @@ async function getInfo(id) {
         if (document.getElementById('screenshots-tab').classList.contains('active')) {
             updateScreenshotsGallery([]);
         }
+        // Hide device config
+        hideDeviceConfigUI();
     }
 }
 
@@ -189,6 +197,50 @@ socket.on("delete_screenshot_error", (data) => {
     showMsg(`Error deleting screenshot: ${data.error}`);
 });
 
+// Blueprint events
+socket.on("blueprint_data", (blueprint) => {
+    updateBlueprintUI(blueprint);
+});
+
+socket.on("blueprint_updated", (data) => {
+    if (data.success) {
+        showMsg('Blueprint saved successfully');
+        loadBlueprint(); // Reload to confirm
+    }
+});
+
+socket.on("blueprint_changed", (blueprint) => {
+    updateBlueprintUI(blueprint);
+    showMsg('Blueprint was updated by another session');
+});
+
+// Device config events
+socket.on("device_config_data", (config) => {
+    updateDeviceConfigUI(config);
+});
+
+socket.on("device_config_updated", (data) => {
+    if (data.success) {
+        showMsg('Device configuration saved successfully');
+        loadDeviceConfig(); // Reload to confirm
+    }
+});
+
+socket.on("device_config_reset", (data) => {
+    if (data.success) {
+        showMsg('Device configuration reset to blueprint');
+        loadDeviceConfig(); // Reload to confirm
+    }
+});
+
+socket.on("blueprint_error", (data) => {
+    showMsg('Blueprint error: ' + data.error);
+});
+
+socket.on("device_config_error", (data) => {
+    showMsg('Device config error: ' + data.error);
+});
+
 
 
 /** Functions */
@@ -303,6 +355,121 @@ function showMsg(msg) {
     pTag.innerText = msg
     msgs.insertAdjacentElement("beforeend", pTag)
     setTimeout(() => pTag.remove(), 5000)
+}
+
+// Blueprint functions
+function loadBlueprint() {
+    socket.emit("get_blueprint");
+}
+
+function saveBlueprint() {
+    const serverUrl = document.getElementById('blueprint-server-url').value.trim();
+    const screenshotQuality = parseInt(document.getElementById('blueprint-screenshot-quality').value);
+    const autoScreenshot = document.getElementById('blueprint-auto-screenshot').checked;
+    
+    if (!serverUrl) {
+        showMsg('Please enter a valid Server URL');
+        return;
+    }
+    
+    if (screenshotQuality < 1 || screenshotQuality > 100) {
+        showMsg('Screenshot Quality must be between 1 and 100');
+        return;
+    }
+    
+    socket.emit("update_blueprint", {
+        server_url: serverUrl,
+        screenshot_quality: screenshotQuality,
+        auto_screenshot: autoScreenshot
+    });
+}
+
+function updateBlueprintUI(blueprint) {
+    currentBlueprint = blueprint;
+    document.getElementById('blueprint-server-url').value = blueprint.server_url || '';
+    document.getElementById('blueprint-screenshot-quality').value = blueprint.screenshot_quality || 70;
+    document.getElementById('blueprint-auto-screenshot').checked = blueprint.auto_screenshot === 1;
+}
+
+// Device config functions
+function loadDeviceConfig() {
+    if (!currentDevice || currentDevice === 'None') {
+        showMsg('Please select a device first');
+        return;
+    }
+    socket.emit("get_device_config", currentDevice);
+}
+
+function saveDeviceConfig() {
+    if (!currentDevice || currentDevice === 'None') {
+        showMsg('Please select a device first');
+        return;
+    }
+    
+    const serverUrl = document.getElementById('device-server-url').value.trim();
+    const screenshotQuality = parseInt(document.getElementById('device-screenshot-quality').value);
+    const autoScreenshot = document.getElementById('device-auto-screenshot').checked;
+    
+    if (!serverUrl) {
+        showMsg('Please enter a valid Server URL');
+        return;
+    }
+    
+    if (screenshotQuality < 1 || screenshotQuality > 100) {
+        showMsg('Screenshot Quality must be between 1 and 100');
+        return;
+    }
+    
+    socket.emit("update_device_config", {
+        device_uuid: currentDevice,
+        server_url: serverUrl,
+        screenshot_quality: screenshotQuality,
+        auto_screenshot: autoScreenshot
+    });
+}
+
+function resetDeviceConfig() {
+    if (!currentDevice || currentDevice === 'None') {
+        showMsg('Please select a device first');
+        return;
+    }
+    
+    if (confirm('Are you sure you want to reset this device configuration to blueprint defaults?')) {
+        socket.emit("reset_device_config", currentDevice);
+    }
+}
+
+function updateDeviceConfigUI(config) {
+    currentDeviceConfig = config;
+    
+    // Show device config section
+    document.getElementById('device-config-section').style.display = 'block';
+    document.getElementById('no-device-selected').style.display = 'none';
+    
+    // Update device name
+    const device = Array.from(devices.values()).find(d => d.ID === currentDevice);
+    document.getElementById('config-device-name').textContent = device ? `${device.Brand} (${device.Model})` : currentDevice;
+    
+    // Update fields
+    document.getElementById('device-server-url').value = config.server_url || '';
+    document.getElementById('device-screenshot-quality').value = config.screenshot_quality || 70;
+    document.getElementById('device-auto-screenshot').checked = config.auto_screenshot === 1 || config.auto_screenshot === true;
+    
+    // Update source indicator
+    const sourceElement = document.getElementById('device-config-source');
+    if (config.is_custom === 1) {
+        sourceElement.textContent = 'Custom';
+        sourceElement.className = 'config-source custom';
+    } else {
+        sourceElement.textContent = 'Blueprint';
+        sourceElement.className = 'config-source blueprint';
+    }
+}
+
+function hideDeviceConfigUI() {
+    document.getElementById('device-config-section').style.display = 'none';
+    document.getElementById('no-device-selected').style.display = 'block';
+    currentDeviceConfig = null;
 }
 
 function showScreenshotModal(imageUrl, filename, currentIndex = 0) {
@@ -587,9 +754,16 @@ function showTab(tabName) {
     document.getElementById(tabName + '-tab').classList.add('active');
     event.target.classList.add('active');
 
-    // Load screenshots if switching to screenshots tab
+    // Load data based on tab
     if (tabName === 'screenshots') {
         loadScreenshots();
+    } else if (tabName === 'config') {
+        loadBlueprint();
+        if (currentDevice && currentDevice !== 'None') {
+            loadDeviceConfig();
+        } else {
+            hideDeviceConfigUI();
+        }
     }
 }
 
@@ -649,6 +823,9 @@ $(document).ready(() => {
 
     // Initialize screenshot button state
     updateScreenshotButton()
+    
+    // Load blueprint on startup
+    loadBlueprint()
 })
 
 // Function to reinitialize nice-select if needed

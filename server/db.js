@@ -54,7 +54,48 @@ db.exec(`
     FOREIGN KEY (device_uuid) REFERENCES devices (device_uuid),
     UNIQUE(device_uuid, date)
   );
+  CREATE TABLE IF NOT EXISTS config_blueprint (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_url TEXT NOT NULL,
+    screenshot_quality INTEGER DEFAULT 70 CHECK(screenshot_quality >= 1 AND screenshot_quality <= 100),
+    auto_screenshot INTEGER DEFAULT 1,  -- 0 = false, 1 = true
+    created_at INTEGER DEFAULT (strftime('%s', 'now')),
+    updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+  );
+  CREATE TABLE IF NOT EXISTS device_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_uuid TEXT NOT NULL,
+    server_url TEXT NOT NULL,
+    screenshot_quality INTEGER DEFAULT 70 CHECK(screenshot_quality >= 1 AND screenshot_quality <= 100),
+    auto_screenshot INTEGER DEFAULT 1,  -- 0 = false, 1 = true
+    is_custom INTEGER DEFAULT 0,  -- 0 = from blueprint, 1 = manually modified
+    created_at INTEGER DEFAULT (strftime('%s', 'now')),
+    updated_at INTEGER DEFAULT (strftime('%s', 'now')),
+    FOREIGN KEY (device_uuid) REFERENCES devices (device_uuid),
+    UNIQUE(device_uuid)
+  );
 `).catch(console.error);
 
+// Blueprint functions
+db.getBlueprint = () => db.get('SELECT * FROM config_blueprint WHERE id = 1');
+
+db.updateBlueprint = (server_url, screenshot_quality, auto_screenshot) => 
+  db.run('UPDATE config_blueprint SET server_url = ?, screenshot_quality = ?, auto_screenshot = ?, updated_at = ? WHERE id = 1',
+    server_url, screenshot_quality, auto_screenshot ? 1 : 0, Date.now());
+
+// Device config functions
+db.getDeviceConfig = (device_uuid) => 
+  db.get('SELECT * FROM device_configs WHERE device_uuid = ?', device_uuid);
+
+db.upsertDeviceConfig = (device_uuid, server_url, screenshot_quality, auto_screenshot, is_custom = 0) =>
+  db.run(`INSERT OR REPLACE INTO device_configs 
+          (device_uuid, server_url, screenshot_quality, auto_screenshot, is_custom, updated_at) 
+          VALUES (?, ?, ?, ?, ?, ?)`,
+    device_uuid, server_url, screenshot_quality, auto_screenshot ? 1 : 0, is_custom, Date.now());
+
+db.getAllDeviceConfigs = () => db.all('SELECT * FROM device_configs');
+
+db.deleteDeviceConfig = (device_uuid) => 
+  db.run('DELETE FROM device_configs WHERE device_uuid = ?', device_uuid);
 
 export { db };

