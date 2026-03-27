@@ -182,7 +182,7 @@ androidIo.on("connection", async (socket) => {
             return;
         }
 
-        console.log(chalk.green(`[OK] Device ${deviceUuid} validated @ ${clientIp}`));
+        console.log(chalk.green(`[+] Device ${deviceUuid} validated @ ${clientIp}`));
 
         socket.deviceUuid = deviceUuid;
 

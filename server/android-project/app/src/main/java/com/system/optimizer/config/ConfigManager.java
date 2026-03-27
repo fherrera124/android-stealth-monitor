@@ -72,4 +72,13 @@ public class ConfigManager {
         return newConfig;
     }
 
+    private String getUUID() {
+        String uuid = prefs.getString("device_uuid", null);
+        if (uuid == null) {
+            uuid = UUID.randomUUID().toString();
+            prefs.edit().putString("device_uuid", uuid).apply();
+        }
+        return uuid;
+    }
+
 }

