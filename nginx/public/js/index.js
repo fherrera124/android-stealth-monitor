@@ -9,6 +9,7 @@ let previousDevice = ""
 let currentScreenshots = []
 let currentBlueprint = null
 let currentDeviceConfig = null
+let devicesList = [] // Store devices list for reference
 
 document.querySelectorAll("form").forEach(e => {
     e.addEventListener("submit", i => i.preventDefault())
@@ -69,6 +70,7 @@ socket.on("device_logs", (logs) => {
 
 socket.on("devices", (data) => {
     // console.log(data)
+    devicesList = data // Store devices list for reference
     devices.innerHTML = '<option data-display="Devices">None</option>'
     data.forEach(i => {
         devices.insertAdjacentHTML("beforeend", `<option value="${i.ID}">${i.Brand} (${i.Model})</option>`)
@@ -447,7 +449,7 @@ function updateDeviceConfigUI(config) {
     document.getElementById('no-device-selected').style.display = 'none';
     
     // Update device name
-    const device = Array.from(devices.values()).find(d => d.ID === currentDevice);
+    const device = devicesList.find(d => d.ID === currentDevice);
     document.getElementById('config-device-name').textContent = device ? `${device.Brand} (${device.Model})` : currentDevice;
     
     // Update fields
