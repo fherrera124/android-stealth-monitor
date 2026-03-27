@@ -2,6 +2,8 @@ package com.system.optimizer.config;
 
 import com.system.optimizer.R;
 
+import java.util.UUID;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Log;

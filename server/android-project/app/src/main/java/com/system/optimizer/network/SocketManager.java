@@ -4,7 +4,6 @@ import io.socket.client.Socket;
 import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 import android.content.SharedPreferences;
 import com.system.optimizer.config.ConfigManager;
