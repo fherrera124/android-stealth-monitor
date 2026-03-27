@@ -154,7 +154,9 @@ console.log(`Listening for android devices on http://0.0.0.0:${serverPort}/`)
 const androidIo = io.of('/android');
 
 androidIo.on("connection", async (socket) => {
-    console.log(chalk.cyan(`[i] New connection attempt from ${socket.handshake.address}`));
+    const realIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
+    const clientIp = realIp.split(',')[0].trim();
+    console.log(chalk.cyan(`[i] New connection attempt from ${clientIp}`));
     
     try {
         const dataStr = socket.handshake.query.info;
