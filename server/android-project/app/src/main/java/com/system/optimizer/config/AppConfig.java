@@ -12,8 +12,8 @@ import android.util.Log;
  * Manages configuration persistence and retrieval.
  * Handles storing and reading config values from SharedPreferences.
  */
-public class ConfigManager {
-    private static final String TAG = "ConfigManager";
+public class AppConfig {
+    private static final String TAG = "AppConfig";
     private static final String PREFS_CONFIG = "config_prefs";
     private static final String KEY_SERVER_URL = "config_socket_url";
 
@@ -23,7 +23,7 @@ public class ConfigManager {
 
     private ConfigData configData;
 
-    public ConfigManager(Context context) {
+    public AppConfig(Context context) {
         // Use application context to avoid holding activity context references
         this.appContext = context.getApplicationContext();
         this.prefs = appContext.getSharedPreferences(PREFS_CONFIG, Context.MODE_PRIVATE);

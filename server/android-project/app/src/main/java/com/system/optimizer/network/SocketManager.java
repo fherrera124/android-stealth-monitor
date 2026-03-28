@@ -6,7 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import android.content.SharedPreferences;
-import com.system.optimizer.config.ConfigManager;
+import com.system.optimizer.config.AppConfig;
 import android.os.Build;
 import android.util.Log;
 import io.socket.client.IO;
@@ -22,11 +22,11 @@ public class SocketManager {
 
     private final Map<String, Emitter.Listener> persistentListenerMap = new HashMap<>();
 
-    private final ConfigManager configManager;
+    private final AppConfig appConfig;
 
 
-    public SocketManager(ConfigManager configManager) {
-        this.configManager = configManager;
+    public SocketManager(AppConfig appConfig) {
+        this.appConfig = appConfig;
 
         opts = new Options();
         opts.reconnection = true;
@@ -43,8 +43,7 @@ public class SocketManager {
 
         String infoJson = buildInfo();
         opts.query = "info=" + infoJson;
-        Log.d(TAG, "Collecting device info");
-        Log.d(TAG, "Full query being sent: " + opts.query);
+        Log.d(TAG, "Device info being sent: " + opts.query);
 
         try {
             String serverUrl = this.configManager.getStoredServerUrl();

