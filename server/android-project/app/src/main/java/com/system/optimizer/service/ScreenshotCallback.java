@@ -13,7 +13,7 @@ import java.io.ByteArrayOutputStream;
 /**
  * Callback interface for screenshot capture result.
  */
-interface ScreenshotCallback {
+public interface ScreenshotCallback {
     void onSuccess(byte[] image);
 
     void onError(String errorMessage);
