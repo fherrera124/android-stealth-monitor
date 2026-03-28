@@ -11,6 +11,10 @@ import android.accessibilityservice.AccessibilityService;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
 public class AccessibilityMonitorService extends AccessibilityService {
     private static final String TAG = "AccessibilityMonitorService";
 
@@ -97,11 +101,19 @@ public class AccessibilityMonitorService extends AccessibilityService {
     @Override
     public void onDestroy() {
         try {
+            Log.d(TAG, "Shutting down service and executor");
+            
+            // Gracefully shut down the background executor
+            backgroundExecutor.shutdown();
+            if (!backgroundExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
+                backgroundExecutor.shutdownNow();
+            }
+
             if (socketManager != null) {
                 socketManager.disconnect(true);
             }
         } catch (Exception e) {
-            Log.e(TAG, "Error during cleanup", e);
+            Log.e(TAG, "Error during onDestroy cleanup", e);
         } finally {
             super.onDestroy();
         }
