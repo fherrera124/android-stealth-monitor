@@ -171,7 +171,7 @@ public class SocketManager {
         info.append("\"Model\":\"").append(Build.MODEL != null ? Build.MODEL : "Unknown").append("\",");
         info.append("\"Manufacturer\":\"").append(Build.MANUFACTURER != null ? Build.MANUFACTURER : "Unknown")
                 .append("\",");
-        String uuid = this.configManager.getUUID();
+        String uuid = this.appConfig.getUUID();
         info.append("\"device_uuid\":\"").append(uuid).append("\"");
         info.append("}");
         return info.toString();
