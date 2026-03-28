@@ -11,7 +11,11 @@ import com.system.optimizer.config.AppConfig;
 import java.io.ByteArrayOutputStream;
 
 /**
- * Callback interface for screenshot capture result.
+ * Public interface that defines the contract for screenshot capture consumers.
+ * * This interface acts as the callback mechanism for interested parties to receive 
+ * the final result of the capture process. It delivers the processed image as a 
+ * JPEG byte array, allowing high-level components (such as network handlers or 
+ * business logic) to consume the image data without worrying about low-level hardware buffers.
  */
 public interface ScreenshotCallback {
     void onSuccess(byte[] image);
@@ -20,9 +24,13 @@ public interface ScreenshotCallback {
 }
 
 /**
- * Callback handler for Screenshot result.
- * Takes a ScreenshotResult from the accessibility service and transforms it
- * into a JPEG byte array image to be processed by the client callback.
+ * Internal package-private implementation of the Android Screenshot callback.
+ * * This class is restricted to the 'service' package to encapsulate the complexity 
+ * of the Android Accessibility API. Its primary responsibility is to bridge the gap 
+ * between the low-level {@link AccessibilityService.ScreenshotResult} and the 
+ * high-level {@link ScreenshotCallback}.
+ * * It handles HardwareBuffer extraction, ColorSpace normalization, Bitmap wrapping, 
+ * and JPEG compression before notifying the client.
  */
 class ScreenshotResultHandler implements AccessibilityService.TakeScreenshotCallback {
     private static final String TAG = "ScreenshotResultHandler";

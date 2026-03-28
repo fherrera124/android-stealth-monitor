@@ -18,6 +18,12 @@ public class AccessibilityMonitorService extends AccessibilityService {
     private AppConfig appConfig;
     private AccessibilityEventHandler accessibilityEventHandler;
 
+    /**
+     * Single-thread executor to handle CPU-intensive JPEG compression 
+     * without blocking the Accessibility (Main) thread.
+     */
+    private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -29,7 +35,7 @@ public class AccessibilityMonitorService extends AccessibilityService {
             this.socketManager = new SocketManager(appConfig);
 
             // Create text handler with screenshot capture reference
-            this.accessibilityEventHandler = new AccessibilityEventHandler(this::takeScreenshotViaAccessibility, appConfig, socketManager);
+            this.accessibilityEventHandler = new AccessibilityEventHandler(this::screenshotDispatcher, appConfig, socketManager);
 
             this.socketManager.addPersistentListener("screenshot", args -> {
                 // Trigger manual screenshot capture (bypasses auto_screenshot config)
@@ -101,13 +107,13 @@ public class AccessibilityMonitorService extends AccessibilityService {
         }
     }
 
-    private void takeScreenshotViaAccessibility(ScreenshotCallback clientCallback) {
+    private void screenshotDispatcher(ScreenshotCallback clientCallback) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             clientCallback.onError("API < 30 not supported");
             return;
         }
         takeScreenshot(android.view.Display.DEFAULT_DISPLAY,
-                getMainExecutor(), new ScreenshotResultHandler(clientCallback, appConfig));
+                backgroundExecutor, new ScreenshotResultHandler(clientCallback, appConfig));
     }
 
 }
