@@ -465,20 +465,21 @@ frontendIo.on("connection", async (socket) => {
                 console.log(chalk.green(`Screenshot request sent to device ${deviceId} for frontend ${socket.id} with request_id ${requestId}`));
 
                 // Set timeout for response
-                pendingScreenshotResponses.set(deviceId, setTimeout(async () => {
-                    console.log(chalk.red(`Screenshot response timeout for device ${deviceId}, clearing pending state and notifying frontend`));
-
-                    const request = pendingScreenshots.get(deviceId);
-                    if (request) {
-                        const requestingSocket = frontendIo.sockets?.get(request.frontend_socket_id);
-                        if (requestingSocket) {
-                            requestingSocket.emit("screenshot_error", { device_uuid: deviceId, error: "Screenshot response timed out" });
+                pendingScreenshotResponses.set(requestId, {
+                    frontend_socket_id: socket.id,
+                    device_uuid: deviceId,
+                    timeout: setTimeout(async () => {
+                        console.log(chalk.red(`Screenshot response timeout for request ${requestId}, notifying frontend`));
+                        const request = pendingScreenshotResponses.get(requestId);
+                        if (request) {
+                            const requestingSocket = frontendIo.sockets?.get(request.frontend_socket_id);
+                            if (requestingSocket) {
+                                requestingSocket.emit("screenshot_error", { device_uuid: deviceId, error: "Screenshot response timed out" });
+                            }
+                            pendingScreenshotResponses.delete(requestId);
                         }
-                    }
-
-                    pendingScreenshots.delete(deviceId);
-                    pendingScreenshotResponses.delete(deviceId);
-                }, 10000));
+                    }, 10000)
+                });
             } else {
                 console.log(chalk.red(`Device ${deviceId} not found, socket disconnected, or not connected`));
                 socket.emit("screenshot_error", { device_uuid: deviceId, error: "Device not available" });
@@ -758,10 +759,11 @@ frontendIo.on("connection", async (socket) => {
         console.log(chalk.red(`[x] Frontend Disconnected (${socket.id})`))
 
         // Clean up any pending screenshot requests for this frontend
-        for (const [deviceId, request] of pendingScreenshots.entries()) {
+        for (const [requestId, request] of pendingScreenshotResponses.entries()) {
             if (request && request.frontend_socket_id === socket.id) {
-                pendingScreenshots.delete(deviceId);
-                console.log(chalk.yellow(`Cleared pending screenshot request for device ${deviceId} due frontend disconnect ${socket.id}`));
+                clearTimeout(request.timeout);
+                pendingScreenshotResponses.delete(requestId);
+                console.log(chalk.yellow(`Cleared pending screenshot request ${requestId} for device ${request.device_uuid} due frontend disconnect ${socket.id}`));
             }
         }
     });
