@@ -46,7 +46,7 @@ public class SocketManager {
         Log.d(TAG, "Device info being sent: " + opts.query);
 
         try {
-            String serverUrl = this.configManager.getStoredServerUrl();
+            String serverUrl = this.appConfig.getStoredServerUrl();
             Log.d(TAG, "Attempting to connect to socket at URL: " + serverUrl);
 
             socket = IO.socket(serverUrl, opts);
