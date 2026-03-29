@@ -324,7 +324,7 @@ androidIo.on("connection", async (socket) => {
                     if (Buffer.isBuffer(data)) {
                         buffer = data;
                     } else {
-                        throw new Error('Expected binary, got ' + typeof data);
+                        throw new Error('Expected binary, got ' + data);
                     }
                 } else {
                     throw new Error('Unexpected number of arguments: ' + args.length);
