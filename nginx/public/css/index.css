@@ -958,6 +958,11 @@ input, textarea, button, select {
     transition: background-color 0.2s;
 }
 
+.config-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .config-button.save {
     background-color: #28a745;
     color: white;

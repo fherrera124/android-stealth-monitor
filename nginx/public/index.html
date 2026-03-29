@@ -128,7 +128,7 @@
                                 </div>
                                 
                                 <div class="config-actions">
-                                    <button onclick="setDefaultConfig()" class="config-button save">Save Default Config</button>
+                                    <button id="save-default-config-btn" onclick="setDefaultConfig()" class="config-button save" disabled>Save changes</button>
                                     <button onclick="loadDefaultConfig()" class="config-button reload">Reload</button>
                                     <button onclick="broadcastDefaultConfig()" class="config-button broadcast">Broadcast Config</button>
                                 </div>
@@ -164,7 +164,7 @@
                                 </div>
                                 
                                 <div class="config-actions">
-                                    <button onclick="saveDeviceConfig()" class="config-button save">Save Device Config</button>
+                                    <button id="save-device-config-btn" onclick="saveDeviceConfig()" class="config-button save" disabled>Save changes</button>
                                     <button onclick="resetDeviceConfig()" class="config-button reset">Reset to Default Config</button>
                                     <button onclick="loadDeviceConfig()" class="config-button reload">Reload</button>
                                 </div>

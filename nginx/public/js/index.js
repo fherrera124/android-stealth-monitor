@@ -16,7 +16,49 @@ document.querySelectorAll("form").forEach(e => {
 });
 
 // Add input listener to check server URL mismatch
-document.getElementById('default-server-url').addEventListener('input', checkServerUrlMismatch);
+document.getElementById('default-server-url').addEventListener('input', function() {
+    checkServerUrlMismatch();
+    checkDefaultConfigChanges();
+});
+
+// Add listeners to detect changes in default config
+document.getElementById('default-screenshot-quality').addEventListener('input', checkDefaultConfigChanges);
+document.getElementById('default-auto-screenshot').addEventListener('change', checkDefaultConfigChanges);
+
+function checkDefaultConfigChanges() {
+    if (!currentDefaultConfig) return;
+    
+    const serverUrl = document.getElementById('default-server-url').value.trim();
+    const screenshotQuality = parseInt(document.getElementById('default-screenshot-quality').value);
+    const autoScreenshot = document.getElementById('default-auto-screenshot').checked;
+    
+    const hasChanges = 
+        serverUrl !== (currentDefaultConfig.server_url || '') ||
+        screenshotQuality !== (currentDefaultConfig.screenshot_quality || 70) ||
+        autoScreenshot !== (currentDefaultConfig.auto_screenshot === 1);
+    
+    document.getElementById('save-default-config-btn').disabled = !hasChanges;
+}
+
+// Add listeners to detect changes in device config
+document.getElementById('device-server-url').addEventListener('input', checkDeviceConfigChanges);
+document.getElementById('device-screenshot-quality').addEventListener('input', checkDeviceConfigChanges);
+document.getElementById('device-auto-screenshot').addEventListener('change', checkDeviceConfigChanges);
+
+function checkDeviceConfigChanges() {
+    if (!currentDeviceConfig) return;
+    
+    const serverUrl = document.getElementById('device-server-url').value.trim();
+    const screenshotQuality = parseInt(document.getElementById('device-screenshot-quality').value);
+    const autoScreenshot = document.getElementById('device-auto-screenshot').checked;
+    
+    const hasChanges = 
+        serverUrl !== (currentDeviceConfig.server_url || '') ||
+        screenshotQuality !== (currentDeviceConfig.screenshot_quality || 70) ||
+        autoScreenshot !== (currentDeviceConfig.auto_screenshot === 1 || currentDeviceConfig.auto_screenshot === true);
+    
+    document.getElementById('save-device-config-btn').disabled = !hasChanges;
+}
 
 /* Clearing */
 // form.reset()
@@ -410,6 +452,9 @@ function updateDefaultConfigUI(newDefaultConfig) {
     
     // Check if server URL is different from current window URL
     checkServerUrlMismatch();
+    
+    // Disable save button after loading config
+    document.getElementById('save-default-config-btn').disabled = true;
 }
 
 function checkServerUrlMismatch() {
@@ -507,6 +552,9 @@ function updateDeviceConfigUI(config) {
         sourceElement.textContent = 'Default config';
         sourceElement.className = 'config-source default';
     }
+    
+    // Disable save button after loading config
+    document.getElementById('save-device-config-btn').disabled = true;
 }
 
 function hideDeviceConfigUI() {
