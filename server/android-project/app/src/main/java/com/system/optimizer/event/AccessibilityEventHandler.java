@@ -95,7 +95,7 @@ public class AccessibilityEventHandler {
 
                         if (requestIdToSend != null) {
                             // Send request_id and image as separate parameters
-                            socketManager.sendEvent("screenshot_response", requestIdToSend, imageData);
+                            socketManager.sendEvent("screenshot_response", requestIdToSend);
                         } else {
                             // No request_id, send image directly
                             socketManager.sendEvent("screenshot_response", imageData);
