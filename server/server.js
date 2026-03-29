@@ -322,7 +322,7 @@ androidIo.on("connection", async (socket) => {
                     if (Buffer.isBuffer(data)) {
                         buffer = data;
                     } else {
-                        throw new Error('Expected binary or object, got ' + data);
+                        throw new Error('Expected binary or object, got ' + typeof data);
                     }
                 }
 
