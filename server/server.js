@@ -124,12 +124,6 @@ androidIo.on("connection", async (socket) => {
     const clientIp = getClientIp(socket);
     console.log(chalk.cyan(`[i] New connection attempt from ${clientIp}`));
 
-    // Detectar si el transporte cambia (Upgrade)
-    socket.conn.on('upgrade', () => {
-        const newTransport = socket.conn.transport.name;
-        console.log(`Conexión mejorada a: ${newTransport}`);
-    });
-
     try {
         const dataStr = socket.handshake.query.info;
 
