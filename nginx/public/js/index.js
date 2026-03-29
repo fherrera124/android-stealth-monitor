@@ -285,6 +285,8 @@ socket.on("default_config_error", (data) => {
     showMsg('Default config error: ' + data.error);
     // Show error message in config section
     document.getElementById('default-config-error').style.display = 'block';
+    // Show "Set to current URL" button when no default config exists
+    checkServerUrlMismatch();
 });
 
 socket.on("default_config_broadcasted", (data) => {

