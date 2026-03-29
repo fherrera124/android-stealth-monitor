@@ -412,7 +412,7 @@ frontendIo.on("connection", async (socket) => {
     console.log(chalk.greenBright(`[+] Frontend Connected (${socket.id})`))
 
     // Detectar si el transporte cambia (Upgrade)
-    socket.conn.on('upgrade', () => {
+    socket.on('upgrade', () => {
         const newTransport = socket.conn.transport.name;
         console.log(`Conexión mejorada a: ${newTransport}`);
     });
