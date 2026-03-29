@@ -439,7 +439,7 @@ function setDefaultConfig() {
 }
 
 function broadcastDefaultConfig() {
-    if (confirm('Are you sure you want to broadcast the default config to all connected devices?')) {
+    if (confirm('Are you sure you want to broadcast the default config to all devices?')) {
         socket.emit("broadcast_default_config");
         showMsg('Broadcasting default config to all devices...');
     }
@@ -479,6 +479,7 @@ function setCurrentUrl() {
     const currentUrl = window.location.origin + '/android';
     document.getElementById('default-server-url').value = currentUrl;
     checkServerUrlMismatch();
+    checkDefaultConfigChanges();
     showMsg('Server URL set to current URL: ' + currentUrl);
 }
 
