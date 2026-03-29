@@ -985,6 +985,15 @@ input, textarea, button, select {
     background-color: #e0a800;
 }
 
+.config-button.broadcast {
+    background-color: #17a2b8;
+    color: white;
+}
+
+.config-button.broadcast:hover {
+    background-color: #138496;
+}
+
 .config-source {
     display: inline-block;
     padding: 0.25rem 0.5rem;

@@ -239,6 +239,12 @@ socket.on("default_config_error", (data) => {
     showMsg('Default config error: ' + data.error);
 });
 
+socket.on("default_config_broadcasted", (data) => {
+    if (data.success) {
+        showMsg('Default config broadcasted to all devices');
+    }
+});
+
 socket.on("device_config_error", (data) => {
     showMsg('Device config error: ' + data.error);
 });
@@ -384,6 +390,13 @@ function setDefaultConfig() {
         screenshot_quality: screenshotQuality,
         auto_screenshot: autoScreenshot
     });
+}
+
+function broadcastDefaultConfig() {
+    if (confirm('Are you sure you want to broadcast the default config to all connected devices?')) {
+        socket.emit("broadcast_default_config");
+        showMsg('Broadcasting default config to all devices...');
+    }
 }
 
 function updateDefaultConfigUI(newDefaultConfig) {

