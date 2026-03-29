@@ -26,11 +26,16 @@ document.getElementById('default-screenshot-quality').addEventListener('input', 
 document.getElementById('default-auto-screenshot').addEventListener('change', checkDefaultConfigChanges);
 
 function checkDefaultConfigChanges() {
-    if (!currentDefaultConfig) return;
-    
     const serverUrl = document.getElementById('default-server-url').value.trim();
     const screenshotQuality = parseInt(document.getElementById('default-screenshot-quality').value);
     const autoScreenshot = document.getElementById('default-auto-screenshot').checked;
+    
+    // If no default config exists, enable save button only if server_url is not empty
+    if (!currentDefaultConfig) {
+        document.getElementById('save-default-config-btn').disabled = !serverUrl;
+        document.getElementById('broadcast-config-btn').disabled = true;
+        return;
+    }
     
     const hasChanges = 
         serverUrl !== (currentDefaultConfig.server_url || '') ||
