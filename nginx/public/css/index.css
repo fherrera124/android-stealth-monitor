@@ -1009,23 +1009,7 @@ input, textarea, button, select {
     background-color: #5a32a3;
 }
 
-.config-source {
-    display: inline-block;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    font-weight: 500;
-}
 
-.config-source.default {
-    background-color: #17a2b8;
-    color: white;
-}
-
-.config-source.custom {
-    background-color: #6f42c1;
-    color: white;
-}
 
 .config-message {
     text-align: center;

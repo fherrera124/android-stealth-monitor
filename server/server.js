@@ -50,8 +50,7 @@ async function generateDeviceConfig(deviceUuid) {
             deviceUuid,
             defaultConfig.server_url,
             defaultConfig.screenshot_quality,
-            defaultConfig.auto_screenshot,
-            0 // is_custom = 0 (from default config)
+            defaultConfig.auto_screenshot
         );
 
         console.log(chalk.blue(`[i] Generated config for device ${deviceUuid} from default config`));
@@ -650,8 +649,7 @@ frontendIo.on("connection", async (socket) => {
                     deviceConfig.device_uuid,
                     defaultConfig.server_url,
                     defaultConfig.screenshot_quality,
-                    defaultConfig.auto_screenshot,
-                    0 // is_custom = 0 (from default config)
+                    defaultConfig.auto_screenshot
                 );
             }
             console.log(chalk.blue(`[i] Updated ${allDeviceConfigs.length} device configs in database`));
@@ -683,8 +681,7 @@ frontendIo.on("connection", async (socket) => {
                 const generatedConfig = await generateDeviceConfig(deviceUuid);
                 socket.emit("device_config_data", {
                     device_uuid: deviceUuid,
-                    ...generatedConfig,
-                    is_custom: 0
+                    ...generatedConfig
                 });
             }
         } catch (error) {
@@ -713,8 +710,7 @@ frontendIo.on("connection", async (socket) => {
                 device_uuid,
                 server_url,
                 screenshot_quality,
-                auto_screenshot,
-                1 // is_custom = 1 (manually modified)
+                auto_screenshot
             );
 
             console.log(chalk.green(`[+] Config updated for device ${device_uuid} by frontend ${socket.id}`));

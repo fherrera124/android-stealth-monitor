@@ -547,15 +547,7 @@ function updateDeviceConfigUI(config) {
     document.getElementById('device-screenshot-quality').value = config.screenshot_quality || 70;
     document.getElementById('device-auto-screenshot').checked = config.auto_screenshot === 1 || config.auto_screenshot === true;
     
-    // Update source indicator
-    const sourceElement = document.getElementById('device-config-source');
-    if (config.is_custom === 1) {
-        sourceElement.textContent = 'Custom';
-        sourceElement.className = 'config-source custom';
-    } else {
-        sourceElement.textContent = 'Default config';
-        sourceElement.className = 'config-source default';
-    }
+
     
     // Disable save button after loading config
     document.getElementById('save-device-config-btn').disabled = true;

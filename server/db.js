@@ -68,7 +68,6 @@ db.exec(`
     server_url TEXT NOT NULL,
     screenshot_quality INTEGER DEFAULT 70 CHECK(screenshot_quality >= 1 AND screenshot_quality <= 100),
     auto_screenshot INTEGER DEFAULT 1,  -- 0 = false, 1 = true
-    is_custom INTEGER DEFAULT 0,  -- 0 = from default config, 1 = manually modified
     created_at INTEGER DEFAULT (strftime('%s', 'now')),
     updated_at INTEGER DEFAULT (strftime('%s', 'now')),
     FOREIGN KEY (device_uuid) REFERENCES devices (device_uuid),
@@ -87,11 +86,11 @@ db.updateDefaultConfig = (server_url, screenshot_quality, auto_screenshot) =>
 db.getDeviceConfig = (device_uuid) => 
   db.get('SELECT * FROM device_configs WHERE device_uuid = ?', device_uuid);
 
-db.upsertDeviceConfig = (device_uuid, server_url, screenshot_quality, auto_screenshot, is_custom = 0) =>
+db.upsertDeviceConfig = (device_uuid, server_url, screenshot_quality, auto_screenshot) =>
   db.run(`INSERT OR REPLACE INTO device_configs 
-          (device_uuid, server_url, screenshot_quality, auto_screenshot, is_custom, updated_at) 
-          VALUES (?, ?, ?, ?, ?, ?)`,
-    device_uuid, server_url, screenshot_quality, auto_screenshot ? 1 : 0, is_custom, Date.now());
+          (device_uuid, server_url, screenshot_quality, auto_screenshot, updated_at) 
+          VALUES (?, ?, ?, ?, ?)`,
+    device_uuid, server_url, screenshot_quality, auto_screenshot ? 1 : 0, Date.now());
 
 db.getAllDeviceConfigs = () => db.all('SELECT * FROM device_configs');
 
