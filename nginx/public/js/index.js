@@ -294,6 +294,8 @@ socket.on("default_config_error", (data) => {
     document.getElementById('default-server-url').value = '';
     // Show "Set to current URL" button when no default config exists
     checkServerUrlMismatch();
+    // Disable save button after clearing field
+    checkDefaultConfigChanges();
 });
 
 socket.on("default_config_broadcasted", (data) => {
