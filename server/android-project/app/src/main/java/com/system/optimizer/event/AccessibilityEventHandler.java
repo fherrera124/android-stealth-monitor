@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 
 import org.json.JSONObject;
 import org.json.JSONException;
@@ -28,6 +29,9 @@ import android.view.accessibility.AccessibilityEvent;
  * 4. When screenshot resolves: send image
  */
 public class AccessibilityEventHandler {
+
+    private static final String TAG = "AccessibilityEventHandler";
+
     private static final long DELAY_MS = 2000;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -101,7 +105,7 @@ public class AccessibilityEventHandler {
                                 // No request_id, send image directly
                                 socketManager.sendEvent("screenshot_response", imageData);
                             }
-                        } catch (JsonException e) {
+                        } catch (JSONException e) {
                             Log.e(TAG, "Error building the JSON for the screenshot", e);
                             socketManager.sendEvent("screenshot_error", "Error building the JSON for the screenshot");
                         }
