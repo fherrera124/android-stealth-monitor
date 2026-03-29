@@ -324,7 +324,7 @@ androidIo.on("connection", async (socket) => {
                     if (Buffer.isBuffer(data)) {
                         buffer = data;
                     } else {
-                        throw new Error('Expected binary, got ' + data);
+                        throw new Error('Expected binary, got ' + typeof data);
                     }
                 } else {
                     throw new Error('Unexpected number of arguments: ' + args.length);
@@ -410,6 +410,12 @@ const getClientIp = (socket) => {
 // Socket io Connection for Frontend
 frontendIo.on("connection", async (socket) => {
     console.log(chalk.greenBright(`[+] Frontend Connected (${socket.id})`))
+
+    // Detectar si el transporte cambia (Upgrade)
+    socket.conn.on('upgrade', () => {
+        const newTransport = socket.conn.transport.name;
+        console.log(`Conexión mejorada a: ${newTransport}`);
+    });
 
     try {
         const deviceList = Array.from(devices.values()).map((d) => ({
