@@ -285,6 +285,8 @@ socket.on("default_config_error", (data) => {
     showMsg('Default config error: ' + data.error);
     // Show error message in config section
     document.getElementById('default-config-error').style.display = 'block';
+    // Clear server URL field when no default config exists
+    document.getElementById('default-server-url').value = '';
     // Show "Set to current URL" button when no default config exists
     checkServerUrlMismatch();
 });
@@ -489,7 +491,6 @@ function setCurrentUrl() {
     document.getElementById('default-server-url').value = currentUrl;
     checkServerUrlMismatch();
     checkDefaultConfigChanges();
-    showMsg('Server URL set to current URL: ' + currentUrl);
 }
 
 // Device config functions
