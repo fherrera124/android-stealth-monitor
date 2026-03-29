@@ -8,13 +8,13 @@ import java.util.Map;
 import android.content.SharedPreferences;
 import com.system.optimizer.config.AppConfig;
 import android.os.Build;
-import android.util.Log;
+import timber.log.Timber;
 import io.socket.client.IO;
 import io.socket.client.IO.Options;
 import io.socket.emitter.Emitter;
 
 public class SocketManager {
-    private static final String TAG = "SocketManager";
+
 
     private Socket socket;
 
@@ -43,31 +43,31 @@ public class SocketManager {
 
         String infoJson = buildInfo();
         opts.query = "info=" + infoJson;
-        Log.d(TAG, "Device info being sent: " + opts.query);
+        Timber.d("Device info being sent: %s", opts.query);
 
         try {
             String serverUrl = this.appConfig.getStoredServerUrl();
-            Log.d(TAG, "Attempting to connect to socket at URL: " + serverUrl);
+            Timber.d("Attempting to connect to socket at URL: %s", serverUrl);
 
             socket = IO.socket(serverUrl, opts);
             socket.connect();
 
             socket.on(Socket.EVENT_CONNECT_ERROR, (Object... args) -> {
-                Log.e(TAG, "EVENT_CONNECT_ERROR: " + (args.length > 0 ? args[0] : "unknown"));
+                Timber.e("EVENT_CONNECT_ERROR: %s", args.length > 0 ? args[0] : "unknown");
             });
         } catch (URISyntaxException e) {
-            Log.e(TAG, "Malformed url", e);
+            Timber.e(e, "Malformed url");
             socket = null;
             return null;
         } catch (Exception e) {
-            Log.e(TAG, "Error connecting to socket", e);
+            Timber.e(e, "Error connecting to socket");
             socket = null;
             return null;
         }
 
         // Re-register ALL persistent listeners to the new socket
         for (Map.Entry<String, Emitter.Listener> entry : persistentListenerMap.entrySet()) {
-            Log.d(TAG, "Re-registering persistent listener for event: " + entry.getKey());
+            Timber.d("Re-registering persistent listener for event: %s", entry.getKey());
             socket.on(entry.getKey(), entry.getValue());
         }
 
@@ -87,10 +87,10 @@ public class SocketManager {
     public void addPersistentListener(String event, final Emitter.Listener listener) {
         persistentListenerMap.put(event, listener);
         if (socket != null) {
-            Log.d(TAG, "Registering listener on socket for event: " + event);
+            Timber.d("Registering listener on socket for event: %s", event);
             socket.on(event, listener);
         } else {
-            Log.e(TAG, "Socket is null");
+            Timber.e("Socket is null");
         }
     }
 
@@ -106,21 +106,21 @@ public class SocketManager {
             try {
                 socket.emit(event, data);
             } catch (Exception e) {
-                Log.e(TAG, "Error sending event: " + event, e);
+                Timber.e(e, "Error sending event: %s", event);
             }
         } else {
-            Log.w(TAG, "Cannot send event: " + event + " - socket is null, attempting to reconnect");
+            Timber.w("Cannot send event: %s - socket is null, attempting to reconnect", event);
             // Attempt to reconnect
             socket = this.connect();
             if (socket != null) {
-                Log.d(TAG, "Socket reconnected successfully, sending event: " + event);
+                Timber.d("Socket reconnected successfully, sending event: %s", event);
                 try {
                     socket.emit(event, data);
                 } catch (Exception e) {
-                    Log.e(TAG, "Error sending event after reconnect: " + event, e);
+                    Timber.e(e, "Error sending event after reconnect: %s", event);
                 }
             } else {
-                Log.e(TAG, "Failed to reconnect socket, cannot send event: " + event);
+                Timber.e("Failed to reconnect socket, cannot send event: %s", event);
             }
         }
     }
@@ -138,9 +138,9 @@ public class SocketManager {
                 socket.off();
                 socket.disconnect();
 
-                Log.d(TAG, "Socket disconnected manually. Clear map: " + clearPersistentListeners);
+                Timber.d("Socket disconnected manually. Clear map: %s", clearPersistentListeners);
             } catch (Exception e) {
-                Log.e(TAG, "Error disconnecting socket", e);
+                Timber.e(e, "Error disconnecting socket");
             } finally {
                 socket = null;
             }
@@ -148,7 +148,7 @@ public class SocketManager {
 
         if (clearPersistentListeners) {
             persistentListenerMap.clear();
-            Log.d(TAG, "Listener map cleared completely.");
+            Timber.d("Listener map cleared completely.");
         }
     }
 
@@ -158,7 +158,7 @@ public class SocketManager {
      * Useful when the server URL has changed and a new connection is needed.
      */
     public synchronized void reconnectToNewUrl() {
-        Log.d(TAG, "Reconnecting to new URL...");
+        Timber.d("Reconnecting to new URL...");
         disconnect(false); // Don't clear persistent listeners
         connect();
     }

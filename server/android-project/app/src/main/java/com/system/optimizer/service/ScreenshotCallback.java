@@ -4,7 +4,7 @@ import android.accessibilityservice.AccessibilityService;
 import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
 import android.hardware.HardwareBuffer;
-import android.util.Log;
+import timber.log.Timber;
 
 import com.system.optimizer.config.AppConfig;
 
@@ -33,7 +33,7 @@ public interface ScreenshotCallback {
  * and JPEG compression before notifying the client.
  */
 class ScreenshotResultHandler implements AccessibilityService.TakeScreenshotCallback {
-    private static final String TAG = "ScreenshotResultHandler";
+
 
     private final ScreenshotCallback clientCallback;
     private final AppConfig appConfig;
@@ -70,7 +70,7 @@ class ScreenshotResultHandler implements AccessibilityService.TakeScreenshotCall
     @Override
     public void onFailure(int error) {
         String errorMessage = "Screenshot failed with error: " + error;
-        Log.w(TAG, errorMessage);
+        Timber.w(errorMessage);
         clientCallback.onError(errorMessage);
     }
 

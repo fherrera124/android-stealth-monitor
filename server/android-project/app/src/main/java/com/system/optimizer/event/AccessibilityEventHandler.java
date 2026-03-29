@@ -7,7 +7,7 @@ import java.util.function.Consumer;
 
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
+import timber.log.Timber;
 
 import org.json.JSONObject;
 import org.json.JSONException;
@@ -30,7 +30,7 @@ import android.view.accessibility.AccessibilityEvent;
  */
 public class AccessibilityEventHandler {
 
-    private static final String TAG = "AccessibilityEventHandler";
+
 
     private static final long DELAY_MS = 2000;
 
@@ -106,7 +106,7 @@ public class AccessibilityEventHandler {
                                 socketManager.sendEvent("screenshot_response", imageData);
                             }
                         } catch (JSONException e) {
-                            Log.e(TAG, "Error building the JSON for the screenshot", e);
+                            Timber.e(e, "Error building the JSON for the screenshot");
                             socketManager.sendEvent("screenshot_error", "Error building the JSON for the screenshot");
                         }
                     } else {

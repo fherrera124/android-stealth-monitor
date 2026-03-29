@@ -6,14 +6,14 @@ import java.util.UUID;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.util.Log;
+import timber.log.Timber;
 
 /**
  * Manages configuration persistence and retrieval.
  * Handles storing and reading config values from SharedPreferences.
  */
 public class AppConfig {
-    private static final String TAG = "AppConfig";
+
     private static final String PREFS_CONFIG = "config_prefs";
     private static final String KEY_SERVER_URL = "config_socket_url";
 
@@ -34,7 +34,7 @@ public class AppConfig {
 
         if (serverUrl == null || serverUrl.isEmpty()) {
             serverUrl = appContext.getString(R.string.SERVER_URL);
-            Log.d(TAG, "First run - using SERVER_URL from build: " + serverUrl);
+            Timber.d("First run - using SERVER_URL from build: %s", serverUrl);
             editor.putString(KEY_SERVER_URL, serverUrl);
             editor.apply();
         }
@@ -43,7 +43,7 @@ public class AppConfig {
 
     public void setConfig(ConfigData configData) {
         if (configData == null) {
-            Log.w(TAG, "setConfig called with null configData");
+            Timber.w("setConfig called with null configData");
             return;
         }
         this.configData = configData;

