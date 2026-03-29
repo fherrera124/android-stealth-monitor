@@ -680,6 +680,19 @@ frontendIo.on("connection", async (socket) => {
                 auto_screenshot: defaultConfig.auto_screenshot === 1
             };
             
+            // Update all device configs in database with default config
+            const allDeviceConfigs = await db.getAllDeviceConfigs();
+            for (const deviceConfig of allDeviceConfigs) {
+                await db.upsertDeviceConfig(
+                    deviceConfig.device_uuid,
+                    defaultConfig.server_url,
+                    defaultConfig.screenshot_quality,
+                    defaultConfig.auto_screenshot,
+                    0 // is_custom = 0 (from default config)
+                );
+            }
+            console.log(chalk.blue(`[i] Updated ${allDeviceConfigs.length} device configs in database`));
+            
             console.log(chalk.green(`[+] Default config to broadcast: ${JSON.stringify(configToSend)}`));
             // Broadcast to all connected Android devices
             androidIo.emit("config_data", configToSend);
