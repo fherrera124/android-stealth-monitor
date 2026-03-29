@@ -5,8 +5,6 @@ import { exec } from 'child_process';
 
 import { db } from './db.js';
 
-const serverPort = 4000;
-
 // Generate device config from default config
 async function generateDeviceConfig(deviceUuid) {
     try {
@@ -81,7 +79,7 @@ async function saveScreenshot(imageBuffer, deviceUuid) {
 }
 
 // Socket.io server
-const io = new Server(serverPort, {
+const io = new Server(8080, {
     cors: {
         origin: "*",
         methods: ["GET", "POST"]
@@ -90,8 +88,6 @@ const io = new Server(serverPort, {
 
 // Socket.io namespace for frontend connections
 const frontendIo = io.of('/frontend');
-
-console.log(`Listening for android devices on http://0.0.0.0:${serverPort}/`)
 
 // Socket io Connection for Android devices
 const androidIo = io.of('/android');

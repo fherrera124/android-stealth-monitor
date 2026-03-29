@@ -24,7 +24,7 @@ services:
       - ./nginx/public:/usr/share/nginx/html:ro
       - ./screenshots:/usr/share/nginx/html/screenshots:ro
     ports:
-      - "4001:4001"
+      - "4000:4000"
     restart: unless-stopped
     networks:
       - internal
@@ -33,7 +33,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.android-portal.tls=true"
-      - "traefik.http.services.android-portal.loadbalancer.server.port=4001"
+      - "traefik.http.services.android-portal.loadbalancer.server.port=4000"
 
 networks:
   default:

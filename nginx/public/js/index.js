@@ -95,9 +95,6 @@ async function getInfo(id) {
     }
 }
 
-/** Making Socket Connections */
-// Socket.IO automatically uses wss: for https: and ws: for http:
-// Connect to /frontend namespace via nginx proxy on port 4001
 const socket = io('/frontend', {
     transports: ['websocket'],
     upgrade: true

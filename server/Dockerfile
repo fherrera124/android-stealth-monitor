@@ -17,6 +17,4 @@ COPY server/package*.json ./
 
 RUN npm install && npm cache clean --force
 
-EXPOSE 4000
-
 CMD ["node", "server.js"]

