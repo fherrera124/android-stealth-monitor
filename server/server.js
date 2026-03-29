@@ -680,6 +680,7 @@ frontendIo.on("connection", async (socket) => {
                 auto_screenshot: defaultConfig.auto_screenshot === 1
             };
             
+            console.log(chalk.green(`[+] Default config to broadcast: ${JSON.stringify(configToSend)}`));
             // Broadcast to all connected Android devices
             androidIo.emit("config_data", configToSend);
             
