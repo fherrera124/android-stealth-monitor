@@ -10,7 +10,7 @@ import timber.log.Timber;
  * Uses a single TAG "StealthMonitor" for all logs.
  * Automatically includes the class name in each log message.
  * 
- * Usage in Application.onCreate():
+ * First, in your Application class:
  *   TimberInitializer.init();
  * 
  * Then use Timber anywhere:
@@ -18,11 +18,11 @@ import timber.log.Timber;
  *   Timber.e("Error: %s", error);  // Logs error with formatting
  * 
  * Filter in logcat:
- *   adb logcat -s StealthMonitor
+ *   adb logcat -s AndroidMonitor
  */
 public class TimberInitializer {
     
-    private static final String APP_TAG = "StealthMonitor";
+    private static final String APP_TAG = "AndroidMonitor";
     
     /**
      * Initialize Timber with custom tree that uses single TAG.
