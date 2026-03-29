@@ -54,7 +54,7 @@ public class AccessibilityMonitorService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event == null) {
+        if (event == null || handler == null) {
             return;
         }
 
@@ -79,14 +79,14 @@ public class AccessibilityMonitorService extends AccessibilityService {
             if (!backgroundExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
                 backgroundExecutor.shutdownNow();
             }
-
+        } catch (Exception e) {
+            Timber.e(e, "Error during onDestroy cleanup");
+            backgroundExecutor.shutdownNow();
+        } finally {
             // Delegate socket cleanup to handler
             if (handler != null) {
                 handler.cleanup();
             }
-        } catch (Exception e) {
-            Timber.e(e, "Error during onDestroy cleanup");
-        } finally {
             super.onDestroy();
         }
     }
