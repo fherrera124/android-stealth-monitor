@@ -283,6 +283,8 @@ socket.on("device_config_reset", (data) => {
 
 socket.on("default_config_error", (data) => {
     showMsg('Default config error: ' + data.error);
+    // Show error message in config section
+    document.getElementById('default-config-error').style.display = 'block';
 });
 
 socket.on("default_config_broadcasted", (data) => {
@@ -447,6 +449,10 @@ function broadcastDefaultConfig() {
 
 function updateDefaultConfigUI(newDefaultConfig) {
     currentDefaultConfig = newDefaultConfig;
+    
+    // Hide error message if config exists
+    document.getElementById('default-config-error').style.display = 'none';
+    
     document.getElementById('default-server-url').value = newDefaultConfig.server_url || '';
     document.getElementById('default-screenshot-quality').value = newDefaultConfig.screenshot_quality || 70;
     document.getElementById('default-auto-screenshot').checked = newDefaultConfig.auto_screenshot === 1;
@@ -456,8 +462,8 @@ function updateDefaultConfigUI(newDefaultConfig) {
     
     // Disable save button after loading config
     document.getElementById('save-default-config-btn').disabled = true;
-    // Enable broadcast button after loading config (no changes pending)
-    document.getElementById('broadcast-config-btn').disabled = false;
+    // Enable broadcast button only if server_url is set
+    document.getElementById('broadcast-config-btn').disabled = !newDefaultConfig.server_url;
 }
 
 function checkServerUrlMismatch() {
@@ -468,7 +474,8 @@ function checkServerUrlMismatch() {
     // Remove /android namespace from server URL for comparison
     const serverUrlBase = serverUrl.replace(/\/android$/, '');
     
-    if (serverUrl && serverUrlBase !== currentUrl) {
+    // Show button if field is empty or URL doesn't match current URL
+    if (!serverUrl || serverUrlBase !== currentUrl) {
         setUrlBtn.style.display = 'inline-block';
     } else {
         setUrlBtn.style.display = 'none';
