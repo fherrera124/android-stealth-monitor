@@ -417,7 +417,10 @@ function checkServerUrlMismatch() {
     const currentUrl = window.location.origin;
     const setUrlBtn = document.getElementById('set-current-url-btn');
     
-    if (serverUrl && serverUrl !== currentUrl) {
+    // Remove /android namespace from server URL for comparison
+    const serverUrlBase = serverUrl.replace(/\/android$/, '');
+    
+    if (serverUrl && serverUrlBase !== currentUrl) {
         setUrlBtn.style.display = 'inline-block';
     } else {
         setUrlBtn.style.display = 'none';
@@ -425,7 +428,7 @@ function checkServerUrlMismatch() {
 }
 
 function setCurrentUrl() {
-    const currentUrl = window.location.origin;
+    const currentUrl = window.location.origin + '/android';
     document.getElementById('default-server-url').value = currentUrl;
     checkServerUrlMismatch();
     showMsg('Server URL set to current URL: ' + currentUrl);
