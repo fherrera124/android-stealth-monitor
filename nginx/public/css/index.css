@@ -994,6 +994,16 @@ input, textarea, button, select {
     background-color: #138496;
 }
 
+.config-button.set-url {
+    background-color: #6f42c1;
+    color: white;
+    margin-top: 0.5rem;
+}
+
+.config-button.set-url:hover {
+    background-color: #5a32a3;
+}
+
 .config-source {
     display: inline-block;
     padding: 0.25rem 0.5rem;

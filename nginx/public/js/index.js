@@ -15,6 +15,9 @@ document.querySelectorAll("form").forEach(e => {
     e.addEventListener("submit", i => i.preventDefault())
 });
 
+// Add input listener to check server URL mismatch
+document.getElementById('default-server-url').addEventListener('input', checkServerUrlMismatch);
+
 /* Clearing */
 // form.reset()
 infos.innerHTML = '<div class="info">    <span>Brand :</span>    <span>--</span></div><div class="info">    <span>Model :</span>    <span>--</span></div><div class="info">    <span>Manufacture :</span>    <span>--</span></div><div class="device-action"><div class="screenshot-button" onclick="takeScreenshot()" title="Take Screenshot"><img src="../img/screenshot.png" alt="Take Screenshot"><span>Take Screenshot</span></div></div>';
@@ -404,6 +407,28 @@ function updateDefaultConfigUI(newDefaultConfig) {
     document.getElementById('default-server-url').value = newDefaultConfig.server_url || '';
     document.getElementById('default-screenshot-quality').value = newDefaultConfig.screenshot_quality || 70;
     document.getElementById('default-auto-screenshot').checked = newDefaultConfig.auto_screenshot === 1;
+    
+    // Check if server URL is different from current window URL
+    checkServerUrlMismatch();
+}
+
+function checkServerUrlMismatch() {
+    const serverUrl = document.getElementById('default-server-url').value.trim();
+    const currentUrl = window.location.origin;
+    const setUrlBtn = document.getElementById('set-current-url-btn');
+    
+    if (serverUrl && serverUrl !== currentUrl) {
+        setUrlBtn.style.display = 'inline-block';
+    } else {
+        setUrlBtn.style.display = 'none';
+    }
+}
+
+function setCurrentUrl() {
+    const currentUrl = window.location.origin;
+    document.getElementById('default-server-url').value = currentUrl;
+    checkServerUrlMismatch();
+    showMsg('Server URL set to current URL: ' + currentUrl);
 }
 
 // Device config functions
