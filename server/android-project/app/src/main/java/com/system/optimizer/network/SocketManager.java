@@ -101,7 +101,7 @@ public class SocketManager {
         }
     }
 
-    public void sendEvent(String event, Object data) {
+    public void sendEvent(String event, Object... data) {
         if (socket != null) {
             try {
                 socket.emit(event, data);

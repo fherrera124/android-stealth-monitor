@@ -297,7 +297,7 @@ androidIo.on("connection", async (socket) => {
         });
 
         // Handle screenshot response from Android device
-        socket.on("screenshot_response", async (data) => {
+        socket.on("screenshot_response", async (...args) => {
             const deviceUuid = socket.deviceUuid;
             if (!deviceUuid) return;
 
@@ -307,9 +307,10 @@ androidIo.on("connection", async (socket) => {
                 let buffer;
                 let requestId = null;
 
-                if (data && typeof data === 'object' && 'image' in data) {
-                    requestId = data.request_id || null;
-                    const imageData = data.image;
+                // Handle two separate parameters: request_id and imageData
+                if (args.length === 2 && typeof args[0] === 'string') {
+                    requestId = args[0];
+                    const imageData = args[1];
 
                     // Socket.io ya convirtió el byte[] de Java en un Buffer de Node
                     if (Buffer.isBuffer(imageData)) {
@@ -317,13 +318,16 @@ androidIo.on("connection", async (socket) => {
                     } else {
                         throw new Error('Expected Buffer, got ' + typeof imageData);
                     }
-                } else {
-                    // Direct binary data
+                } else if (args.length === 1) {
+                    // Single parameter - direct binary data
+                    const data = args[0];
                     if (Buffer.isBuffer(data)) {
                         buffer = data;
                     } else {
-                        throw new Error('Expected binary or object, got ' + typeof data);
+                        throw new Error('Expected binary, got ' + typeof data);
                     }
+                } else {
+                    throw new Error('Unexpected number of arguments: ' + args.length);
                 }
 
                 if (!buffer || buffer.length === 0) {
