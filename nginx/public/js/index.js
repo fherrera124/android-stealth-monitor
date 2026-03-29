@@ -38,6 +38,7 @@ function checkDefaultConfigChanges() {
         autoScreenshot !== (currentDefaultConfig.auto_screenshot === 1);
     
     document.getElementById('save-default-config-btn').disabled = !hasChanges;
+    document.getElementById('broadcast-config-btn').disabled = hasChanges;
 }
 
 // Add listeners to detect changes in device config
@@ -455,6 +456,8 @@ function updateDefaultConfigUI(newDefaultConfig) {
     
     // Disable save button after loading config
     document.getElementById('save-default-config-btn').disabled = true;
+    // Enable broadcast button after loading config (no changes pending)
+    document.getElementById('broadcast-config-btn').disabled = false;
 }
 
 function checkServerUrlMismatch() {
