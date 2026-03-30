@@ -452,6 +452,44 @@ frontendIo.on("connection", async (socket) => {
         }
     });
 
+    socket.on("get_device_logs", async (deviceId) => {
+        if (!deviceId) {
+            console.log(chalk.yellow(`[!] get_device_logs called with invalid deviceId`));
+            return;
+        }
+
+        try {
+            console.log(chalk.cyan(`[i] Fetching logs for device ${deviceId}`));
+            
+            // Get logs from database for the last 7 days
+            const rows = await db.all(
+                'SELECT date, logs_data FROM device_daily_logs WHERE device_uuid = ? ORDER BY date DESC LIMIT 7',
+                deviceId
+            );
+
+            let allLogs = [];
+            for (const row of rows) {
+                try {
+                    const logsArray = JSON.parse(row.logs_data || '[]');
+                    // Convert each log entry to a string format
+                    for (const logEntry of logsArray) {
+                        if (logEntry.log) {
+                            allLogs.push(logEntry.log);
+                        }
+                    }
+                } catch (parseError) {
+                    console.error(`Error parsing logs for date ${row.date}:`, parseError);
+                }
+            }
+
+            console.log(chalk.green(`[+] Sending ${allLogs.length} logs for device ${deviceId}`));
+            socket.emit("device_logs", allLogs);
+        } catch (error) {
+            console.error('Error getting device logs:', error);
+            socket.emit("device_logs", []);
+        }
+    });
+
     socket.on("validate_config", () => {
         console.log(chalk.cyan(`[i] Restart request received via WS from frontend ${socket.id}`));
 
