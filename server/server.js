@@ -141,6 +141,7 @@ androidIo.on("connection", async (socket) => {
                 device.logs = [];
             }
         } else {
+            console.log(chalk.cyan(`[DIAGNOSTIC] Device ${deviceUuid} is new, creating new entry in map`));
             device = {
                 info: data,
                 socket: socket,
@@ -179,6 +180,11 @@ androidIo.on("connection", async (socket) => {
             }
 
             console.log(chalk.redBright(`[x] Device Disconnected (${deviceUuid}) - Reason: ${reason}`));
+            console.log(chalk.cyan(`[DIAGNOSTIC] Device ${deviceUuid} disconnect details:`));
+            console.log(chalk.cyan(`  - Socket id: ${socket.id}`));
+            console.log(chalk.cyan(`  - Socket connected: ${socket.connected}`));
+            console.log(chalk.cyan(`  - Disconnect reason: ${reason}`));
+            console.log(chalk.cyan(`  - Devices in map before cleanup: ${devices.size}`));
 
             // Clear any pending screenshot response timeouts for this device
             for (const [requestId, request] of pendingScreenshotResponses.entries()) {
@@ -189,14 +195,10 @@ androidIo.on("connection", async (socket) => {
             }
 
             try {
-                const device = devices.get(deviceUuid);
-                if (device) {
-                    device.socket = null;
-                    // Clean up logs to prevent memory leaks
-                    if (device.logs && device.logs.length > 100) {
-                        device.logs = device.logs.slice(-100);
-                    }
-                }
+                // FIX: Eliminar completamente el dispositivo del mapa en lugar de establecer socket a null
+                // Esto asegura que cuando el dispositivo se reconecte, se cree una nueva entrada limpia
+                devices.delete(deviceUuid);
+                console.log(chalk.yellow(`[FIX] Device ${deviceUuid} removed from map on disconnect`));
 
                 // Clean up any pending screenshot responses for this device
                 for (const [requestId, request] of pendingScreenshotResponses.entries()) {
@@ -229,6 +231,12 @@ androidIo.on("connection", async (socket) => {
         socket.on("logger", async (data) => {
             const deviceUuid = socket.deviceUuid;
             if (!deviceUuid) return;
+
+            // DIAGNOSTIC LOG: Verificar estado del socket cuando llega evento logger
+            console.log(chalk.cyan(`[DIAGNOSTIC] Logger event received from device ${deviceUuid}`));
+            console.log(chalk.cyan(`  - Socket id: ${socket.id}`));
+            console.log(chalk.cyan(`  - Socket connected: ${socket.connected}`));
+            console.log(chalk.cyan(`  - Data: ${typeof data === 'string' ? data.substring(0, 100) : 'binary'}`));
 
             // Check if this is a screenshot failure response
             if (data && typeof data === 'string' && data.includes("Screenshot failed")) {
@@ -280,6 +288,11 @@ androidIo.on("connection", async (socket) => {
             if (!deviceUuid) return;
 
             console.log(chalk.green(`[+] Screenshot response received from device ${deviceUuid}`));
+            console.log(chalk.cyan(`[DIAGNOSTIC] Screenshot response details:`));
+            console.log(chalk.cyan(`  - Socket id: ${socket.id}`));
+            console.log(chalk.cyan(`  - Socket connected: ${socket.connected}`));
+            console.log(chalk.cyan(`  - Args length: ${args.length}`));
+            console.log(chalk.cyan(`  - Args types: ${args.map(a => typeof a).join(', ')}`));
 
             try {
                 let buffer;
@@ -329,6 +342,9 @@ androidIo.on("connection", async (socket) => {
                     const request = pendingScreenshotResponses.get(requestId);
                     clearTimeout(request.timeout);
                     pendingScreenshotResponses.delete(requestId);
+                    console.log(chalk.cyan(`[DIAGNOSTIC] Cleared pending request ${requestId}`));
+                } else if (requestId) {
+                    console.log(chalk.yellow(`[DIAGNOSTIC] Request ${requestId} not found in pending responses`));
                 }
 
                 // Always broadcast to all frontends
@@ -402,7 +418,6 @@ frontendIo.on("connection", async (socket) => {
 
             if (device && device.socket) {
 
-
                 // Generate unique request_id and store mapping
                 const requestId = `${deviceId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                 pendingScreenshotResponses.set(requestId, {
@@ -421,10 +436,10 @@ frontendIo.on("connection", async (socket) => {
                 });
 
                 // Send request_id to device
-                device.socket.emit("screenshot", { request_id: requestId });
-                console.log(chalk.green(`Screenshot request sent to device ${deviceId} with request_id ${requestId}`));
+                    device.socket.emit("screenshot", { request_id: requestId });
+                    console.log(chalk.green(`Screenshot request sent to device ${deviceId} with request_id ${requestId}`));
             } else {
-                console.log(chalk.red(`Device ${deviceId} not found, socket disconnected, or not connected`));
+                console.log(chalk.red(`Device ${deviceId} not found or socket disconnected`));
                 socket.emit("screenshot_error", { device_uuid: deviceId, error: "Device not available" });
             }
         } catch (error) {
