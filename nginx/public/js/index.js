@@ -305,6 +305,24 @@ socket.on("device_config_error", (data) => {
     showMsg('Device config error: ' + data.error);
 });
 
+socket.on("device_config_host_change_warning", (data) => {
+    const confirmed = confirm(data.message);
+    if (confirmed) {
+        // Re-send the device config with confirmed flag
+        const serverUrl = document.getElementById('device-server-url').value.trim();
+        const screenshotQuality = parseInt(document.getElementById('device-screenshot-quality').value);
+        const autoScreenshot = document.getElementById('device-auto-screenshot').checked;
+        
+        socket.emit("update_device_config", {
+            device_uuid: data.device_uuid,
+            server_url: serverUrl,
+            screenshot_quality: screenshotQuality,
+            auto_screenshot: autoScreenshot,
+            confirmed: true
+        });
+    }
+});
+
 
 
 /** Functions */

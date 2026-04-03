@@ -783,31 +783,28 @@ frontendIo.on("connection", async (socket) => {
                 throw new Error('screenshot_quality must be between 1 and 100');
             }
 
-            // Normalize URL before comparison
-            const normalizedNewUrl = normalizeUrl(server_url);
-            
-            // Get current config
+            const normalizedServerUrl = normalizeUrl(server_url);
+
+            // Get current config and normalize URLs
             const currentConfig = await db.getDeviceConfig(device_uuid);
-            const currentUrl = currentConfig ? normalizeUrl(currentConfig.server_url) : null;
-            
-            // Get default config for comparison
             const defaultConfig = await db.getDefaultConfig();
-            const defaultUrl = defaultConfig ? normalizeUrl(defaultConfig.server_url) : null;
-            
-            // Determine the base URL (without path) for host comparison
+
+            // Extract host from normalized URLs for comparison
             const getHost = (url) => {
                 try {
                     const parsed = new URL(url);
                     return `${parsed.protocol}//${parsed.host}:${parsed.port}`;
                 } catch { return null; }
             };
-            
-            const newHost = getHost(normalizedNewUrl);
-            const currentHost = currentConfig ? getHost(normalizeUrl(currentConfig.server_url)) : (defaultUrl ? getHost(defaultUrl) : null);
-            
+
+            const newHost = getHost(normalizedServerUrl);
+            const currentHost = currentConfig
+                ? getHost(normalizeUrl(currentConfig.server_url))
+                : (defaultConfig ? getHost(normalizeUrl(defaultConfig.server_url)) : null);
+
             // Check if there's a host change and not yet confirmed
             const hasHostChange = currentHost && newHost && newHost !== currentHost;
-            
+
             if (hasHostChange && !confirmed) {
                 // Ask for confirmation
                 socket.emit("device_config_host_change_warning", {
@@ -818,9 +815,6 @@ frontendIo.on("connection", async (socket) => {
                 });
                 return;
             }
-
-            // Normalize URL before saving
-            const normalizedServerUrl = normalizeUrl(server_url);
 
             // Update config in DB
             await db.upsertDeviceConfig(
