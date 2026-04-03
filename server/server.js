@@ -9,12 +9,11 @@ import { db } from './db.js';
 // Generate hash for config comparison
 function generateConfigHash(config) {
     if (!config || !config.server_url) return null;
-    const configString = JSON.stringify({
-        server_url: config.server_url,
-        screenshot_quality: config.screenshot_quality || 70,
-        auto_screenshot: config.auto_screenshot !== undefined ? config.auto_screenshot : true
-    });
-    return crypto.createHash('sha256').update(configString).digest('hex');
+    // Use exact same format as Android client to ensure consistent hash
+    // IMPORTANT: Must match Java String.format exactly: {"server_url":"%s","screenshot_quality":%d,"auto_screenshot":%s}
+    const configString = `{"server_url":"${config.server_url}","screenshot_quality":${config.screenshot_quality || 70},"auto_screenshot":${config.auto_screenshot !== undefined ? config.auto_screenshot : true}}`;
+    const hash = crypto.createHash('sha256').update(configString).digest('hex');
+    return hash;
 }
 
 // Generate device config from default config
@@ -179,18 +178,26 @@ androidIo.on("connection", async (socket) => {
         if (deviceConfig) {
             const serverConfigHash = generateConfigHash(deviceConfig);
             
-            // DIAGNOSTIC: Show exact strings being hashed
-            const serverConfigString = JSON.stringify({
-                server_url: deviceConfig.server_url,
-                screenshot_quality: deviceConfig.screenshot_quality || 70,
-                auto_screenshot: deviceConfig.auto_screenshot !== undefined ? deviceConfig.auto_screenshot : true
-            });
             console.log(chalk.cyan(`[DEBUG] === CONFIG HASH COMPARISON ===`));
-            console.log(chalk.cyan(`[DEBUG] Server config string: ${serverConfigString}`));
-            console.log(chalk.cyan(`[DEBUG] Server config fields:`));
-            console.log(chalk.cyan(`[DEBUG]   - server_url: "${deviceConfig.server_url}"`));
-            console.log(chalk.cyan(`[DEBUG]   - screenshot_quality: ${deviceConfig.screenshot_quality || 70}`));
-            console.log(chalk.cyan(`[DEBUG]   - auto_screenshot: ${deviceConfig.auto_screenshot !== undefined ? deviceConfig.auto_screenshot : true}`));
+            console.log(chalk.cyan(`[DEBUG] Database server_url: "${deviceConfig.server_url}"`));
+            console.log(chalk.cyan(`[DEBUG] server_url length: ${deviceConfig.server_url.length}, char codes: ${JSON.stringify(Array.from(deviceConfig.server_url).map(c => c.charCodeAt(0)))}`));
+            
+            // The client uses the URL directly from SharedPreferences after parsing by ConfigData
+            // ConfigData.parseUrl normalizes to lowercase host
+            // Let's check if the server URL has uppercase
+            if (deviceConfig.server_url !== deviceConfig.server_url.toLowerCase()) {
+                console.log(chalk.yellow(`[DEBUG] WARNING: URL contains uppercase characters!`));
+                console.log(chalk.yellow(`[DEBUG] Lowercase version: "${deviceConfig.server_url.toLowerCase()}"`));
+                
+                // Try hash with lowercase
+                const lowercaseUrl = deviceConfig.server_url.toLowerCase();
+                const testStr = `{"server_url":"${lowercaseUrl}","screenshot_quality":${deviceConfig.screenshot_quality || 70},"auto_screenshot":${deviceConfig.auto_screenshot !== undefined ? deviceConfig.auto_screenshot : true}}`;
+                const testHash = crypto.createHash('sha256').update(testStr).digest('hex');
+                console.log(chalk.yellow(`[DEBUG] Hash with lowercase URL: ${testHash}`));
+            }
+            
+            const serverConfigString = `{"server_url":"${deviceConfig.server_url}","screenshot_quality":${deviceConfig.screenshot_quality || 70},"auto_screenshot":${deviceConfig.auto_screenshot !== undefined ? deviceConfig.auto_screenshot : true}}`;
+            console.log(chalk.cyan(`[DEBUG] Server config string: "${serverConfigString}"`));
             console.log(chalk.cyan(`[DEBUG] Client hash: ${clientConfigHash}`));
             console.log(chalk.cyan(`[DEBUG] Server hash: ${serverConfigHash}`));
             console.log(chalk.cyan(`[DEBUG] ==============================`));
