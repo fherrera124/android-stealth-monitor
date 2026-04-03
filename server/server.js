@@ -10,9 +10,12 @@ async function generateDeviceConfig(deviceUuid) {
     try {
         // Check if config already exists for this device
         let deviceConfig = await db.getDeviceConfig(deviceUuid);
+        
+        console.log(chalk.cyan(`[DEBUG] generateDeviceConfig for ${deviceUuid}: deviceConfig =`, deviceConfig));
 
         if (deviceConfig) {
             // If exists, return existing config
+            console.log(chalk.cyan(`[DEBUG] Using device-specific config: ${deviceConfig.server_url}`));
             return {
                 server_url: deviceConfig.server_url,
                 screenshot_quality: deviceConfig.screenshot_quality,
@@ -22,6 +25,8 @@ async function generateDeviceConfig(deviceUuid) {
 
         // If not exists, generate from default config
         const defaultConfig = await db.getDefaultConfig();
+        console.log(chalk.cyan(`[DEBUG] defaultConfig =`, defaultConfig));
+        
         if (!defaultConfig) {
             console.log(chalk.yellow(`[!] Cannot generate config for device ${deviceUuid}: default config not found`));
             return null;
@@ -126,7 +131,16 @@ androidIo.on("connection", async (socket) => {
         socket.deviceUuid = deviceUuid;
 
         // Use socket.recovered to detect session recovery (more reliable than manual tracking)
-        const isRecoveredSession = socket.recovered;
+        // Fallback to checking if device already exists in map (for environments without Redis adapter)
+        const isRecoveredSession = socket.recovered || devices.has(deviceUuid);
+        
+        // Also check if we already sent config to this device before (more reliable check)
+        const deviceAlreadyConfigured = devices.has(deviceUuid);
+        
+        if (isRecoveredSession || deviceAlreadyConfigured) {
+            console.log(chalk.blue(`[i] Device ${deviceUuid} already has config (recovered or existing) - skipping config emission`));
+            console.log(chalk.cyan(`[DEBUG] socket.recovered: ${socket.recovered}, devices.has(deviceUuid): ${devices.has(deviceUuid)}`));
+        }
         
         let device = devices.get(deviceUuid);
         if (device) {
@@ -161,7 +175,11 @@ androidIo.on("connection", async (socket) => {
 
         // Only send config with server_url on NEW connections, not recovered sessions
         // This prevents the infinite reconnection loop when the client needs to migrate servers
-        if (!isRecoveredSession) {
+        console.log(chalk.cyan(`[DEBUG] isRecoveredSession: ${isRecoveredSession}, socket.recovered: ${socket.recovered}, devices.has(deviceUuid): ${devices.has(deviceUuid)}`));
+        
+        const shouldSkipConfig = isRecoveredSession || devices.has(deviceUuid);
+        
+        if (!shouldSkipConfig) {
             // Generate config for this device from default config (only on first connection)
             const deviceConfig = await generateDeviceConfig(deviceUuid);
             if (deviceConfig) {
@@ -171,7 +189,7 @@ androidIo.on("connection", async (socket) => {
                 console.log(chalk.yellow(`[!] Cannot send config to device ${deviceUuid}: server_url is null in default config`));
             }
         } else {
-            console.log(chalk.blue(`[i] Device ${deviceUuid} session recovered - skipping config emission to prevent loop`));
+            console.log(chalk.blue(`[i] Device ${deviceUuid} already configured - skipping config emission to prevent loop`));
         }
 
         // Broadcast updated device list to frontend
@@ -296,11 +314,6 @@ androidIo.on("connection", async (socket) => {
             if (!deviceUuid) return;
 
             console.log(chalk.green(`[+] Screenshot response received from device ${deviceUuid}`));
-            console.log(chalk.cyan(`[DIAGNOSTIC] Screenshot response details:`));
-            console.log(chalk.cyan(`  - Socket id: ${socket.id}`));
-            console.log(chalk.cyan(`  - Socket connected: ${socket.connected}`));
-            console.log(chalk.cyan(`  - Args length: ${args.length}`));
-            console.log(chalk.cyan(`  - Args types: ${args.map(a => typeof a).join(', ')}`));
 
             try {
                 let buffer;
@@ -748,6 +761,8 @@ frontendIo.on("connection", async (socket) => {
         try {
             const { device_uuid, server_url, screenshot_quality, auto_screenshot } = data;
 
+            console.log(chalk.cyan(`[DEBUG] update_device_config received for ${device_uuid}: server_url = ${server_url}`));
+
             // Validations
             if (!device_uuid) {
                 throw new Error('device_uuid is required');
@@ -766,6 +781,10 @@ frontendIo.on("connection", async (socket) => {
                 screenshot_quality,
                 auto_screenshot
             );
+            
+            // Verify it was saved
+            const savedConfig = await db.getDeviceConfig(device_uuid);
+            console.log(chalk.cyan(`[DEBUG] Config after save:`, savedConfig));
 
             console.log(chalk.green(`[+] Config updated for device ${device_uuid} by frontend ${socket.id}`));
             socket.emit("device_config_updated", { success: true, device_uuid });
