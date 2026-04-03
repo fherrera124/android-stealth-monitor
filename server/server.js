@@ -2,8 +2,20 @@ import { Server } from "socket.io";
 import chalk from "chalk";
 import fs from "fs/promises";
 import { exec } from 'child_process';
+import crypto from 'crypto';
 
 import { db } from './db.js';
+
+// Generate hash for config comparison
+function generateConfigHash(config) {
+    if (!config || !config.server_url) return null;
+    const configString = JSON.stringify({
+        server_url: config.server_url,
+        screenshot_quality: config.screenshot_quality || 70,
+        auto_screenshot: config.auto_screenshot !== undefined ? config.auto_screenshot : true
+    });
+    return crypto.createHash('sha256').update(configString).digest('hex');
+}
 
 // Generate device config from default config
 async function generateDeviceConfig(deviceUuid) {
@@ -103,6 +115,7 @@ androidIo.on("connection", async (socket) => {
 
     try {
         const dataStr = socket.handshake.query.info;
+        const clientConfigHash = socket.handshake.query.config_hash; // Client sends its current config hash
 
         if (!dataStr) {
             console.log(chalk.red(`[!] No 'info' query param in handshake - disconnecting`));
@@ -129,18 +142,6 @@ androidIo.on("connection", async (socket) => {
         console.log(chalk.green(`[+] Device ${deviceUuid} validated @ ${clientIp}`));
 
         socket.deviceUuid = deviceUuid;
-
-        // Use socket.recovered to detect session recovery (more reliable than manual tracking)
-        // Fallback to checking if device already exists in map (for environments without Redis adapter)
-        const isRecoveredSession = socket.recovered || devices.has(deviceUuid);
-
-        // Also check if we already sent config to this device before (more reliable check)
-        const deviceAlreadyConfigured = devices.has(deviceUuid);
-
-        if (isRecoveredSession || deviceAlreadyConfigured) {
-            console.log(chalk.blue(`[i] Device ${deviceUuid} already has config (recovered or existing) - skipping config emission`));
-            console.log(chalk.cyan(`[DEBUG] socket.recovered: ${socket.recovered}, devices.has(deviceUuid): ${devices.has(deviceUuid)}`));
-        }
 
         let device = devices.get(deviceUuid);
         if (device) {
@@ -173,10 +174,20 @@ androidIo.on("connection", async (socket) => {
             deviceUuid, data.Brand, data.Model, data.Manufacturer, Date.now(), Date.now()
         ).catch(console.error);
 
+        // Compare client config hash with server config
         const deviceConfig = await generateDeviceConfig(deviceUuid);
         if (deviceConfig) {
-            socket.emit("config_data", deviceConfig);
-            console.log(chalk.blue(`[i] Sent initial config to device ${deviceUuid}:`, JSON.stringify(deviceConfig)));
+            const serverConfigHash = generateConfigHash(deviceConfig);
+            console.log(chalk.cyan(`[DEBUG] Client hash: ${clientConfigHash}, Server hash: ${serverConfigHash}`));
+
+            if (!clientConfigHash || clientConfigHash !== serverConfigHash) {
+                // Config changed or first connection - send new config
+                socket.emit("config_data", deviceConfig);
+                console.log(chalk.blue(`[i] Sent config to device ${deviceUuid} (hash mismatch):`, JSON.stringify(deviceConfig)));
+            } else {
+                // Config unchanged - no need to send
+                console.log(chalk.blue(`[i] Config unchanged for device ${deviceUuid} - skipping emission`));
+            }
         } else {
             console.log(chalk.yellow(`[!] Cannot send config to device ${deviceUuid}: server_url is null in default config`));
         }

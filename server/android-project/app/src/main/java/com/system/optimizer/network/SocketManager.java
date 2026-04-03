@@ -32,7 +32,7 @@ public class SocketManager {
         opts.reconnection = true;
         opts.reconnectionAttempts = Integer.MAX_VALUE;
         opts.reconnectionDelay = 5000;
-
+        
         socket = this.connect();
     }
 
@@ -42,7 +42,12 @@ public class SocketManager {
         }
 
         String infoJson = buildInfo();
+        String configHash = this.appConfig.generateConfigHash();
+
         opts.query = "info=" + infoJson;
+        if (configHash != null) {
+            opts.query += "&config_hash=" + configHash;
+        }
         Timber.d("Device info being sent: %s", opts.query);
 
         try {
@@ -50,7 +55,6 @@ public class SocketManager {
             Timber.d("Attempting to connect to socket at URL: %s", serverUrl);
 
             socket = IO.socket(serverUrl, opts);
-            socket.connect();
 
             socket.on(Socket.EVENT_CONNECT_ERROR, (Object... args) -> {
                 Timber.e("EVENT_CONNECT_ERROR: %s", args.length > 0 ? args[0] : "unknown");
@@ -65,11 +69,13 @@ public class SocketManager {
             return null;
         }
 
-        // Re-register ALL persistent listeners to the new socket
+        // Register ALL persistent listeners to the new socket
         for (Map.Entry<String, Emitter.Listener> entry : persistentListenerMap.entrySet()) {
             Timber.d("Re-registering persistent listener for event: %s", entry.getKey());
             socket.on(entry.getKey(), entry.getValue());
         }
+
+        socket.connect();
 
         return socket;
     }

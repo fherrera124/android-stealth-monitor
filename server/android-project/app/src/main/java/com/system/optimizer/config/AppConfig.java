@@ -3,6 +3,9 @@ package com.system.optimizer.config;
 import com.system.optimizer.R;
 
 import java.util.UUID;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.nio.charset.StandardCharsets;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -57,6 +60,36 @@ public class AppConfig {
 
     public String getStoredServerUrl() {
         return configData.getServerUrl();
+    }
+
+    /**
+     * Generates a SHA-256 hash of the current configuration for comparison purposes.
+     * Used to determine if the client's config matches the server's config.
+     *
+     * @return The SHA-256 hash as a hex string, or null if config is invalid
+     */
+    public String generateConfigHash() {
+        if (configData == null || configData.getServerUrl() == null) return null;
+        try {
+            String configString = String.format("{\"server_url\":\"%s\",\"screenshot_quality\":%d,\"auto_screenshot\":%s}",
+                configData.getServerUrl(),
+                configData.getScreenshotQuality(),
+                configData.isAutoScreenshotEnabled() ? "true" : "false");
+
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(configString.getBytes(StandardCharsets.UTF_8));
+
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            Timber.e(e, "Error generating config hash");
+            return null;
+        }
     }
 
     /**
