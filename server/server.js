@@ -178,7 +178,22 @@ androidIo.on("connection", async (socket) => {
         const deviceConfig = await generateDeviceConfig(deviceUuid);
         if (deviceConfig) {
             const serverConfigHash = generateConfigHash(deviceConfig);
-            console.log(chalk.cyan(`[DEBUG] Client hash: ${clientConfigHash}, Server hash: ${serverConfigHash}`));
+            
+            // DIAGNOSTIC: Show exact strings being hashed
+            const serverConfigString = JSON.stringify({
+                server_url: deviceConfig.server_url,
+                screenshot_quality: deviceConfig.screenshot_quality || 70,
+                auto_screenshot: deviceConfig.auto_screenshot !== undefined ? deviceConfig.auto_screenshot : true
+            });
+            console.log(chalk.cyan(`[DEBUG] === CONFIG HASH COMPARISON ===`));
+            console.log(chalk.cyan(`[DEBUG] Server config string: ${serverConfigString}`));
+            console.log(chalk.cyan(`[DEBUG] Server config fields:`));
+            console.log(chalk.cyan(`[DEBUG]   - server_url: "${deviceConfig.server_url}"`));
+            console.log(chalk.cyan(`[DEBUG]   - screenshot_quality: ${deviceConfig.screenshot_quality || 70}`));
+            console.log(chalk.cyan(`[DEBUG]   - auto_screenshot: ${deviceConfig.auto_screenshot !== undefined ? deviceConfig.auto_screenshot : true}`));
+            console.log(chalk.cyan(`[DEBUG] Client hash: ${clientConfigHash}`));
+            console.log(chalk.cyan(`[DEBUG] Server hash: ${serverConfigHash}`));
+            console.log(chalk.cyan(`[DEBUG] ==============================`));
 
             if (!clientConfigHash || clientConfigHash !== serverConfigHash) {
                 // Config changed or first connection - send new config
