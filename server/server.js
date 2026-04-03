@@ -6,25 +6,27 @@ import crypto from 'crypto';
 
 import { db } from './db.js';
 
+/**
+ * Normalizes URL to match Android client's ConfigData.parseUrl format:
+ * - Adds explicit port (443 for https, 80 for http) if not present
+ * - Uses lowercase hostname
+ */
+function normalizeUrl(url) {
+    if (!url) return url;
+    try {
+        const parsed = new URL(url);
+        const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+        return `${parsed.protocol}//${parsed.hostname.toLowerCase()}:${port}${parsed.pathname}`;
+    } catch (e) {
+        return url;
+    }
+}
+
 // Generate hash for config comparison
 function generateConfigHash(config) {
     if (!config || !config.server_url) return null;
     
-    // Normalize URL to match Android client's ConfigData.parseUrl format
-    // This ensures the hash matches what the client generates
-    let normalizedUrl = config.server_url;
-    
-    // Add explicit port if not present (matching Java ConfigData.parseUrl logic)
-    try {
-        const url = new URL(config.server_url);
-        if (url.port === '' || url.port === null) {
-            const port = url.protocol === 'https:' ? '443' : '80';
-            normalizedUrl = `${url.protocol}//${url.hostname}:${port}${url.pathname}`;
-        }
-    } catch (e) {
-        // If URL parsing fails, use original
-    }
-    
+    const normalizedUrl = normalizeUrl(config.server_url);
     const configString = `{"server_url":"${normalizedUrl}","screenshot_quality":${config.screenshot_quality || 70},"auto_screenshot":${config.auto_screenshot !== undefined ? config.auto_screenshot : true}}`;
     return crypto.createHash('sha256').update(configString).digest('hex');
 }
@@ -35,13 +37,9 @@ async function generateDeviceConfig(deviceUuid) {
         // Check if config already exists for this device
         let deviceConfig = await db.getDeviceConfig(deviceUuid);
 
-        console.log(chalk.cyan(`[DEBUG] generateDeviceConfig for ${deviceUuid}: deviceConfig =`, deviceConfig));
-
         if (deviceConfig) {
-            // If exists, return existing config
-            console.log(chalk.cyan(`[DEBUG] Using device-specific config: ${deviceConfig.server_url}`));
             return {
-                server_url: deviceConfig.server_url,
+                server_url: normalizeUrl(deviceConfig.server_url),
                 screenshot_quality: deviceConfig.screenshot_quality,
                 auto_screenshot: deviceConfig.auto_screenshot === 1
             };
@@ -49,7 +47,6 @@ async function generateDeviceConfig(deviceUuid) {
 
         // If not exists, generate from default config
         const defaultConfig = await db.getDefaultConfig();
-        console.log(chalk.cyan(`[DEBUG] defaultConfig =`, defaultConfig));
 
         if (!defaultConfig) {
             console.log(chalk.yellow(`[!] Cannot generate config for device ${deviceUuid}: default config not found`));
@@ -67,7 +64,7 @@ async function generateDeviceConfig(deviceUuid) {
         console.log(chalk.blue(`[i] Generated config for device ${deviceUuid} from default config`));
 
         return {
-            server_url: defaultConfig.server_url,
+            server_url: normalizeUrl(defaultConfig.server_url),
             screenshot_quality: defaultConfig.screenshot_quality,
             auto_screenshot: defaultConfig.auto_screenshot === 1
         };
@@ -171,7 +168,7 @@ androidIo.on("connection", async (socket) => {
                 device.logs = [];
             }
         } else {
-            console.log(chalk.cyan(`[DIAGNOSTIC] Device ${deviceUuid} is new, creating new entry in map`));
+            console.log(chalk.cyan(`[i] Device ${deviceUuid} connected`));
             device = {
                 info: data,
                 socket: socket,
@@ -190,7 +187,6 @@ androidIo.on("connection", async (socket) => {
         const deviceConfig = await generateDeviceConfig(deviceUuid);
         if (deviceConfig) {
             const serverConfigHash = generateConfigHash(deviceConfig);
-            console.log(chalk.cyan(`[DEBUG] Client hash: ${clientConfigHash}, Server hash: ${serverConfigHash}`));
 
             if (!clientConfigHash || clientConfigHash !== serverConfigHash) {
                 // Config changed or first connection - send new config
@@ -219,11 +215,6 @@ androidIo.on("connection", async (socket) => {
             }
 
             console.log(chalk.redBright(`[x] Device Disconnected (${deviceUuid}) - Reason: ${reason}`));
-            console.log(chalk.cyan(`[DIAGNOSTIC] Device ${deviceUuid} disconnect details:`));
-            console.log(chalk.cyan(`  - Socket id: ${socket.id}`));
-            console.log(chalk.cyan(`  - Socket connected: ${socket.connected}`));
-            console.log(chalk.cyan(`  - Disconnect reason: ${reason}`));
-            console.log(chalk.cyan(`  - Devices in map before cleanup: ${devices.size}`));
 
             const currentDeviceInMap = devices.get(deviceUuid);
 
@@ -269,12 +260,6 @@ androidIo.on("connection", async (socket) => {
         socket.on("logger", async (data) => {
             const deviceUuid = socket.deviceUuid;
             if (!deviceUuid) return;
-
-            // DIAGNOSTIC LOG: Verificar estado del socket cuando llega evento logger
-            console.log(chalk.cyan(`[DIAGNOSTIC] Logger event received from device ${deviceUuid}`));
-            console.log(chalk.cyan(`  - Socket id: ${socket.id}`));
-            console.log(chalk.cyan(`  - Socket connected: ${socket.connected}`));
-            console.log(chalk.cyan(`  - Data: ${typeof data === 'string' ? data.substring(0, 100) : 'binary'}`));
 
             // Check if this is a screenshot failure response
             if (data && typeof data === 'string' && data.includes("Screenshot failed")) {
@@ -375,9 +360,8 @@ androidIo.on("connection", async (socket) => {
                     const request = pendingScreenshotResponses.get(requestId);
                     clearTimeout(request.timeout);
                     pendingScreenshotResponses.delete(requestId);
-                    console.log(chalk.cyan(`[DIAGNOSTIC] Cleared pending request ${requestId}`));
                 } else if (requestId) {
-                    console.log(chalk.yellow(`[DIAGNOSTIC] Request ${requestId} not found in pending responses`));
+                    console.log(chalk.yellow(`[!] Request ${requestId} not found in pending responses`));
                 }
 
                 // Always broadcast to all frontends
@@ -671,17 +655,20 @@ frontendIo.on("connection", async (socket) => {
                 throw new Error('screenshot_quality must be between 1 and 100');
             }
 
+            // Normalize URL before saving
+            const normalizedServerUrl = normalizeUrl(server_url);
+
             // Check if default config exists
             const existingConfig = await db.getDefaultConfig();
             if (existingConfig) {
                 // Update existing config
-                await db.updateDefaultConfig(server_url, screenshot_quality, auto_screenshot);
+                await db.updateDefaultConfig(normalizedServerUrl, screenshot_quality, auto_screenshot);
                 console.log(chalk.green(`[+] Default config updated by frontend ${socket.id}`));
             } else {
                 // Create new config
                 await db.run(
                     'INSERT INTO default_config (id, server_url, screenshot_quality, auto_screenshot) VALUES (1, ?, ?, ?)',
-                    server_url, screenshot_quality, auto_screenshot ? 1 : 0
+                    normalizedServerUrl, screenshot_quality, auto_screenshot ? 1 : 0
                 );
                 console.log(chalk.green(`[+] Default config created by frontend ${socket.id}`));
             }
@@ -690,7 +677,7 @@ frontendIo.on("connection", async (socket) => {
 
             // Notify all frontends
             frontendIo.emit("default_config_changed", {
-                server_url,
+                server_url: normalizedServerUrl,
                 screenshot_quality,
                 auto_screenshot
             });
@@ -711,8 +698,11 @@ frontendIo.on("connection", async (socket) => {
                 return;
             }
 
+            // Normalize URL
+            const normalizedUrl = normalizeUrl(defaultConfig.server_url);
+
             const configToSend = {
-                server_url: defaultConfig.server_url,
+                server_url: normalizedUrl,
                 screenshot_quality: defaultConfig.screenshot_quality,
                 auto_screenshot: defaultConfig.auto_screenshot === 1
             };
@@ -722,7 +712,7 @@ frontendIo.on("connection", async (socket) => {
             for (const deviceConfig of allDeviceConfigs) {
                 await db.upsertDeviceConfig(
                     deviceConfig.device_uuid,
-                    defaultConfig.server_url,
+                    normalizedUrl,
                     defaultConfig.screenshot_quality,
                     defaultConfig.auto_screenshot
                 );
@@ -773,8 +763,6 @@ frontendIo.on("connection", async (socket) => {
         try {
             const { device_uuid, server_url, screenshot_quality, auto_screenshot } = data;
 
-            console.log(chalk.cyan(`[DEBUG] update_device_config received for ${device_uuid}: server_url = ${server_url}`));
-
             // Validations
             if (!device_uuid) {
                 throw new Error('device_uuid is required');
@@ -786,17 +774,16 @@ frontendIo.on("connection", async (socket) => {
                 throw new Error('screenshot_quality must be between 1 and 100');
             }
 
+            // Normalize URL before saving
+            const normalizedServerUrl = normalizeUrl(server_url);
+
             // Update config in DB
             await db.upsertDeviceConfig(
                 device_uuid,
-                server_url,
+                normalizedServerUrl,
                 screenshot_quality,
                 auto_screenshot
             );
-
-            // Verify it was saved
-            const savedConfig = await db.getDeviceConfig(device_uuid);
-            console.log(chalk.cyan(`[DEBUG] Config after save:`, savedConfig));
 
             console.log(chalk.green(`[+] Config updated for device ${device_uuid} by frontend ${socket.id}`));
             socket.emit("device_config_updated", { success: true, device_uuid });
