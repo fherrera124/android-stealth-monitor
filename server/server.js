@@ -10,13 +10,22 @@ import { db } from './db.js';
  * Normalizes URL to match Android client's ConfigData.parseUrl format:
  * - Adds explicit port (443 for https, 80 for http) if not present
  * - Uses lowercase hostname
+ * - Ensures namespace is at the end of the path (default: "android")
  */
-function normalizeUrl(url) {
+function normalizeUrl(url, namespace = 'android') {
     if (!url) return url;
     try {
         const parsed = new URL(url);
         const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
-        return `${parsed.protocol}//${parsed.hostname.toLowerCase()}:${port}${parsed.pathname}`;
+        let path = parsed.pathname || '';
+        
+        // Normalize path: remove trailing slashes, ensure namespace is present
+        path = path.replace(/\/+$/, '');
+        if (!path.endsWith(`/${namespace}`)) {
+            path = path + '/' + namespace;
+        }
+        
+        return `${parsed.protocol}//${parsed.hostname.toLowerCase()}:${port}${path}`;
     } catch (e) {
         return url;
     }
