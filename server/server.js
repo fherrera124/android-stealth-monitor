@@ -186,19 +186,13 @@ androidIo.on("connection", async (socket) => {
             console.log(chalk.cyan(`  - Disconnect reason: ${reason}`));
             console.log(chalk.cyan(`  - Devices in map before cleanup: ${devices.size}`));
 
-            // Clear any pending screenshot response timeouts for this device
-            for (const [requestId, request] of pendingScreenshotResponses.entries()) {
-                if (request.device_uuid === deviceUuid) {
-                    clearTimeout(request.timeout);
-                    pendingScreenshotResponses.delete(requestId);
-                }
-            }
+            const currentDeviceInMap = devices.get(deviceUuid);
 
-            try {
-                // FIX: Eliminar completamente el dispositivo del mapa en lugar de establecer socket a null
-                // Esto asegura que cuando el dispositivo se reconecte, se cree una nueva entrada limpia
-                devices.delete(deviceUuid);
-                console.log(chalk.yellow(`[FIX] Device ${deviceUuid} removed from map on disconnect`));
+            // Solo procedemos a limpiar si el socket que se desconecta 
+            // es exactamente el mismo que tenemos activo en el mapa.
+            if (currentDeviceInMap && currentDeviceInMap.socket.id === socket.id) {
+
+                console.log(chalk.redBright(`[x] Device Disconnected (${deviceUuid}) - Clean Exit`));
 
                 // Clean up any pending screenshot responses for this device
                 for (const [requestId, request] of pendingScreenshotResponses.entries()) {
@@ -213,6 +207,9 @@ androidIo.on("connection", async (socket) => {
                     }
                 }
 
+                // Ahora sí, borrar del mapa con seguridad
+                devices.delete(deviceUuid);
+
                 // Update last_seen in DB
                 await db.run('UPDATE devices SET last_seen = ? WHERE device_uuid = ?', Date.now(), deviceUuid);
 
@@ -222,8 +219,10 @@ androidIo.on("connection", async (socket) => {
                     ID: d.info.device_uuid
                 })).slice(0, 20);
                 frontendIo.emit("devices", deviceList);
-            } catch (error) {
-                console.error('Error handling device disconnect:', error);
+
+            } else {
+                // Si entramos aquí, es una desconexión de un socket "fantasma" o antiguo
+                console.log(chalk.yellow(`[i] Stale socket disconnected for ${deviceUuid} (ID: ${socket.id}). Ignoring cleanup to preserve new connection.`));
             }
         });
 
@@ -436,8 +435,8 @@ frontendIo.on("connection", async (socket) => {
                 });
 
                 // Send request_id to device
-                    device.socket.emit("screenshot", { request_id: requestId });
-                    console.log(chalk.green(`Screenshot request sent to device ${deviceId} with request_id ${requestId}`));
+                device.socket.emit("screenshot", { request_id: requestId });
+                console.log(chalk.green(`Screenshot request sent to device ${deviceId} with request_id ${requestId}`));
             } else {
                 console.log(chalk.red(`Device ${deviceId} not found or socket disconnected`));
                 socket.emit("screenshot_error", { device_uuid: deviceId, error: "Device not available" });
@@ -475,7 +474,7 @@ frontendIo.on("connection", async (socket) => {
 
         try {
             console.log(chalk.cyan(`[i] Fetching logs for device ${deviceId}`));
-            
+
             // Get logs from database for the last 7 days
             const rows = await db.all(
                 'SELECT date, logs_data FROM device_daily_logs WHERE device_uuid = ? ORDER BY date DESC LIMIT 7',
