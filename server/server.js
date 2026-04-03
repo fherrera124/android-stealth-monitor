@@ -770,7 +770,7 @@ frontendIo.on("connection", async (socket) => {
 
     socket.on("update_device_config", async (data) => {
         try {
-            const { device_uuid, server_url, screenshot_quality, auto_screenshot } = data;
+            const { device_uuid, server_url, screenshot_quality, auto_screenshot, confirmed } = data;
 
             // Validations
             if (!device_uuid) {
@@ -781,6 +781,42 @@ frontendIo.on("connection", async (socket) => {
             }
             if (screenshot_quality < 1 || screenshot_quality > 100) {
                 throw new Error('screenshot_quality must be between 1 and 100');
+            }
+
+            // Normalize URL before comparison
+            const normalizedNewUrl = normalizeUrl(server_url);
+            
+            // Get current config
+            const currentConfig = await db.getDeviceConfig(device_uuid);
+            const currentUrl = currentConfig ? normalizeUrl(currentConfig.server_url) : null;
+            
+            // Get default config for comparison
+            const defaultConfig = await db.getDefaultConfig();
+            const defaultUrl = defaultConfig ? normalizeUrl(defaultConfig.server_url) : null;
+            
+            // Determine the base URL (without path) for host comparison
+            const getHost = (url) => {
+                try {
+                    const parsed = new URL(url);
+                    return `${parsed.protocol}//${parsed.host}:${parsed.port}`;
+                } catch { return null; }
+            };
+            
+            const newHost = getHost(normalizedNewUrl);
+            const currentHost = currentConfig ? getHost(normalizeUrl(currentConfig.server_url)) : (defaultUrl ? getHost(defaultUrl) : null);
+            
+            // Check if there's a host change and not yet confirmed
+            const hasHostChange = currentHost && newHost && newHost !== currentHost;
+            
+            if (hasHostChange && !confirmed) {
+                // Ask for confirmation
+                socket.emit("device_config_host_change_warning", {
+                    device_uuid,
+                    current_host: currentHost,
+                    new_host: newHost,
+                    message: `You are about to change the server URL from ${currentHost} to ${newHost}. The device will reconnect to the new server. Do you want to continue?`
+                });
+                return;
             }
 
             // Normalize URL before saving
@@ -801,12 +837,19 @@ frontendIo.on("connection", async (socket) => {
             const device = devices.get(device_uuid);
             if (device && device.socket) {
                 const newConfig = {
-                    server_url,
+                    server_url: normalizedServerUrl,
                     screenshot_quality,
                     auto_screenshot
                 };
                 device.socket.emit("config_data", newConfig);
                 console.log(chalk.blue(`[i] Sent updated config to device ${device_uuid}`));
+                
+                // If there's a host change, delete device-specific config from DB after sending
+                // Device will use default config from the NEW server when reconnecting
+                if (hasHostChange) {
+                    await db.deleteDeviceConfig(device_uuid);
+                    console.log(chalk.yellow(`[!] Deleted device config from DB - device will use default config from new server on reconnect`));
+                }
             }
         } catch (error) {
             console.error('Error updating device config:', error);
