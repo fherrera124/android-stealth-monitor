@@ -516,9 +516,9 @@ frontendIo.on("connection", async (socket) => {
         try {
             console.log(chalk.cyan(`[i] Fetching logs for device ${deviceId}`));
 
-            // Get logs from database for the last 7 days
+            // Get logs from database for the last 30 days
             const rows = await db.all(
-                'SELECT date, logs_data FROM device_daily_logs WHERE device_uuid = ? ORDER BY date DESC LIMIT 7',
+                'SELECT date, logs_data FROM device_daily_logs WHERE device_uuid = ? ORDER BY date ASC LIMIT 30',
                 deviceId
             );
 
