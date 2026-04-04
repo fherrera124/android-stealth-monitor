@@ -48,7 +48,7 @@ function normalizeUrl(url, namespace = 'android') {
 // Generate hash for config comparison
 function generateConfigHash(config) {
     if (!config || !config.server_url) return null;
-    
+
     const normalizedUrl = normalizeUrl(config.server_url);
     const configString = `{"server_url":"${normalizedUrl}","screenshot_quality":${config.screenshot_quality || 70},"auto_screenshot":${config.auto_screenshot !== undefined ? config.auto_screenshot : true}}`;
     return crypto.createHash('sha256').update(configString).digest('hex');
@@ -817,8 +817,15 @@ frontendIo.on("connection", async (socket) => {
 
             console.log(chalk.cyan(`[DEBUG] hasHostChange: ${hasHostChange}`));
 
-            if (hasHostChange && !confirmed) {
-                // Ask for confirmation
+            if (!hasHostChange) {
+                await db.upsertDeviceConfig(
+                    device_uuid,
+                    normalizedServerUrl,
+                    screenshot_quality,
+                    auto_screenshot
+                );
+                console.log(chalk.green(`[+] Config updated for device ${device_uuid} by frontend ${socket.id}`));
+            } else if (!confirmed) {
                 socket.emit("device_config_host_change_warning", {
                     device_uuid,
                     current_host: currentHost,
@@ -826,20 +833,12 @@ frontendIo.on("connection", async (socket) => {
                     message: `You are about to change the server URL from ${currentHost}/android to ${newHost}/android. The device will reconnect to the new server. Do you want to continue?`
                 });
                 return;
+            } else {
+                // Delete device-specific config completely - device now belongs to new server
+                await db.deleteDeviceConfig(device_uuid);
+                console.log(chalk.yellow(`[!] Host change detected - deleted device config, device migrated to new server`));
             }
-
-            // Update config in DB
-            await db.upsertDeviceConfig(
-                device_uuid,
-                normalizedServerUrl,
-                screenshot_quality,
-                auto_screenshot
-            );
-
-            console.log(chalk.green(`[+] Config updated for device ${device_uuid} by frontend ${socket.id}`));
-            socket.emit("device_config_updated", { success: true, device_uuid });
-
-            // If device is connected, send new config
+            // Then send config to device if connected
             const device = devices.get(device_uuid);
             if (device && device.socket) {
                 const newConfig = {
@@ -848,15 +847,11 @@ frontendIo.on("connection", async (socket) => {
                     auto_screenshot
                 };
                 device.socket.emit("config_data", newConfig);
-                console.log(chalk.blue(`[i] Sent updated config to device ${device_uuid}`));
-                
-                // If there's a host change, delete device-specific config from DB after sending
-                // Device will use default config from the NEW server when reconnecting
-                if (hasHostChange) {
-                    await db.deleteDeviceConfig(device_uuid);
-                    console.log(chalk.yellow(`[!] Deleted device config from DB - device will use default config from new server on reconnect`));
-                }
+                console.log(chalk.blue(`[i] Sent ${hasHostChange ? 'migration' : 'updated'} config to device ${device_uuid}`));
             }
+
+            // Finally confirm to frontend
+            socket.emit("device_config_updated", { success: true, device_uuid });
         } catch (error) {
             console.error('Error updating device config:', error);
             socket.emit("device_config_error", { error: error.message });
