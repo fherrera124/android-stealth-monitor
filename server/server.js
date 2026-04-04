@@ -826,6 +826,7 @@ frontendIo.on("connection", async (socket) => {
                 );
                 console.log(chalk.green(`[+] Config updated for device ${device_uuid} by frontend ${socket.id}`));
             } else if (!confirmed) {
+                console.log(chalk.green(`[+] normalizedServerUrl: ${normalizedServerUrl} for device ${device_uuid}`)); // Debug log
                 socket.emit("device_config_host_change_warning", {
                     device_uuid,
                     current_host: currentHost,
