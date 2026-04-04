@@ -823,7 +823,7 @@ frontendIo.on("connection", async (socket) => {
                     device_uuid,
                     current_host: currentHost,
                     new_host: newHost,
-                    message: `You are about to change the server URL from ${currentHost} to ${newHost}. The device will reconnect to the new server. Do you want to continue?`
+                    message: `You are about to change the server URL from ${currentHost}/android to ${newHost}/android. The device will reconnect to the new server. Do you want to continue?`
                 });
                 return;
             }
