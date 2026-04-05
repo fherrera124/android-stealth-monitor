@@ -146,12 +146,13 @@ androidIo.on("connection", async (socket) => {
         const clientConfigHash = socket.handshake.query.config_hash; // Client sends its current config hash
 
         let deviceUuid = null;
+        let data = null;
         try {
             const dataStr = socket.handshake.query.info;
             if (!dataStr) {
                 throw new Error('Missing info parameter');
             }
-            const data = JSON.parse(dataStr);
+            data = JSON.parse(dataStr);
             deviceUuid = data.device_uuid;
             if (!deviceUuid) {
                 throw new Error("'device_uuid' missing in 'info' data");
