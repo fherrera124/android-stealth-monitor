@@ -44,7 +44,7 @@ function generateConfigHash(config) {
     if (!config || !config.server_url) return null;
 
     const normalizedUrl = normalizeUrl(config.server_url);
-    const configString = `{"server_url":"${normalizedUrl}","screenshot_quality":${config.screenshot_quality || 70},"auto_screenshot":${config.auto_screenshot !== undefined ? config.auto_screenshot : true}}`;
+    const configString = `{"server_url":"${normalizedUrl}","screenshot_quality":${config.screenshot_quality},"auto_screenshot":${config.auto_screenshot}}`;
     return crypto.createHash('sha256').update(configString).digest('hex');
 }
 
