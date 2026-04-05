@@ -201,12 +201,11 @@ socket.on("build_success", (data) => {
 });
 
 socket.on("apk_data", (buffer) => {
-    // Convertir el ArrayBuffer a Blob y descargar
     const blob = new Blob([buffer], { type: 'application/vnd.android.package-archive' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'app-debug.apk';
+    a.download = 'app-release.apk';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -221,14 +220,6 @@ socket.on("apk_error", (data) => {
 socket.on("build_error", (data) => {
     hideBuildProgress();
     showMsg(data.error || 'Build failed');
-});
-
-socket.on("restart_response", (data) => {
-    if (data.success) {
-        showMsg('Restart request sent successfully');
-    } else {
-        showMsg('Restart failed: ' + data.error);
-    }
 });
 
 socket.on("screenshots_list", (screenshots) => {
@@ -378,10 +369,6 @@ function download() {
         hideBuildProgress()
         showMsg('Build request failed')
     }
-}
-
-function validateConfig() {
-    socket.emit("validate_config");
 }
 
 function downloadLatest() {

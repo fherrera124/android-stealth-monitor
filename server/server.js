@@ -6,18 +6,16 @@ import crypto from 'crypto';
 
 import { db } from './db.js';
 
+// ===== UTILITY FUNCTIONS =====
+
 /**
  * Extracts the base host from a URL (protocol + host + port) without path
  */
 function getHostBase(url) {
-    if (!url) return null;
-    try {
-        const parsed = new URL(url);
-        const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
-        return `${parsed.protocol}//${parsed.hostname.toLowerCase()}:${port}`;
-    } catch (e) {
-        return null;
-    }
+    if (!url) throw new Error('URL is required');
+    const parsed = new URL(url);
+    const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+    return `${parsed.protocol}//${parsed.hostname.toLowerCase()}:${port}`;
 }
 
 /**
@@ -27,22 +25,18 @@ function getHostBase(url) {
  * - Ensures namespace is at the end of the path (default: "android")
  */
 function normalizeUrl(url, namespace = 'android') {
-    if (!url) return url;
-    try {
-        const parsed = new URL(url);
-        const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
-        let path = parsed.pathname || '';
+    if (!url) throw new Error('URL is required');
+    const parsed = new URL(url);
+    const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+    let path = parsed.pathname || '';
 
-        // Normalize path: remove trailing slashes, ensure namespace is present
-        path = path.replace(/\/+$/, '');
-        if (!path.endsWith(`/${namespace}`)) {
-            path = path + '/' + namespace;
-        }
-
-        return `${parsed.protocol}//${parsed.hostname.toLowerCase()}:${port}${path}`;
-    } catch (e) {
-        return url;
+    // Normalize path: remove trailing slashes, ensure namespace is present
+    path = path.replace(/\/+$/, '');
+    if (!path.endsWith(`/${namespace}`)) {
+        path = path + '/' + namespace;
     }
+
+    return `${parsed.protocol}//${parsed.hostname.toLowerCase()}:${port}${path}`;
 }
 
 // Generate hash for config comparison
@@ -55,7 +49,7 @@ function generateConfigHash(config) {
 }
 
 // Generate device config from default config
-async function generateDeviceConfig(deviceUuid) {
+async function generateDeviceConfig(deviceUuid, socketId) {
     try {
         // Check if config already exists for this device
         let deviceConfig = await db.getDeviceConfig(deviceUuid);
@@ -72,7 +66,7 @@ async function generateDeviceConfig(deviceUuid) {
         const defaultConfig = await db.getDefaultConfig();
 
         if (!defaultConfig) {
-            console.log(chalk.yellow(`[!] Cannot generate config for device ${deviceUuid}: default config not found`));
+            console.log(chalk.yellow(`[!] Cannot generate config for device ${deviceUuid} (${socketId}): default config not found`));
             return null;
         }
 
@@ -84,7 +78,7 @@ async function generateDeviceConfig(deviceUuid) {
             defaultConfig.auto_screenshot
         );
 
-        console.log(chalk.blue(`[i] Generated config for device ${deviceUuid} from default config`));
+        console.log(chalk.blue(`[i] Generated config for device ${deviceUuid} (${socketId}) from default config`));
 
         return {
             server_url: normalizeUrl(defaultConfig.server_url),
@@ -96,9 +90,6 @@ async function generateDeviceConfig(deviceUuid) {
         return null;
     }
 }
-
-const devices = new Map(); // Map<device_uuid, {info: data, socket: socket}>
-const pendingScreenshotResponses = new Map(); // Map<request_id, {device_uuid, timeout}>
 
 /**
  * Helper function to save a screenshot image to disk
@@ -127,6 +118,11 @@ async function saveScreenshot(imageBuffer, deviceUuid) {
     }
 }
 
+// ===== CONSTANTS =====
+
+const devices = new Map(); // Map<device_uuid, {info: data, socket: socket}>
+const pendingScreenshotResponses = new Map(); // Map<request_id, {device_uuid, timeout}>
+
 // Socket.io server
 const io = new Server(8080, {
     cors: {
@@ -138,19 +134,21 @@ const io = new Server(8080, {
 // Socket.io namespace for frontend connections
 const frontendIo = io.of('/frontend');
 
-// Socket io Connection for Android devices
+// Socket.io namespace for Android connections
 const androidIo = io.of('/android');
 
+// ===== SOCKET.IO SETUP =====
+
 androidIo.on("connection", async (socket) => {
-    const clientIp = getClientIp(socket);
-    console.log(chalk.cyan(`[i] New connection attempt from ${clientIp}`));
+    const connectionId = socket.id;
+    console.log(chalk.cyan(`[i] New connection attempt from ${connectionId}`));
 
     try {
         const dataStr = socket.handshake.query.info;
         const clientConfigHash = socket.handshake.query.config_hash; // Client sends its current config hash
 
         if (!dataStr) {
-            console.log(chalk.red(`[!] No 'info' query param in handshake - disconnecting`));
+            console.log(chalk.red(`[!] No 'info' query param [conn ${socket.id}] - disconnecting`));
             socket.disconnect();
             return;
         }
@@ -159,19 +157,17 @@ androidIo.on("connection", async (socket) => {
         try {
             data = JSON.parse(dataStr);
         } catch (e) {
-            console.log(chalk.red(`[!] Failed to parse JSON from 'info' param: ${e.message}`));
+            console.log(chalk.red(`[!] Failed to parse JSON from 'info' param [conn ${socket.id}] - disconnecting`));
             socket.disconnect();
             return;
         }
 
         const deviceUuid = data.device_uuid;
         if (!deviceUuid) {
-            console.log(chalk.red(`[!] 'device_uuid' missing in info data - disconnecting`));
+            console.log(chalk.red(`[!] 'device_uuid' missing in 'info' data [conn ${socket.id}] - disconnecting`));
             socket.disconnect();
             return;
         }
-
-        console.log(chalk.green(`[+] Device ${deviceUuid} validated @ ${clientIp}`));
 
         socket.deviceUuid = deviceUuid;
 
@@ -191,7 +187,6 @@ androidIo.on("connection", async (socket) => {
                 device.logs = [];
             }
         } else {
-            console.log(chalk.cyan(`[i] Device ${deviceUuid} connected`));
             device = {
                 info: data,
                 socket: socket,
@@ -199,6 +194,7 @@ androidIo.on("connection", async (socket) => {
             };
             devices.set(deviceUuid, device);
         }
+        console.log(chalk.cyan(`[i] Device ${deviceUuid} successfully connected [conn ${socket.id}]`));
 
         // UPSERT device info in DB
         await db.run(
@@ -407,20 +403,6 @@ androidIo.on("connection", async (socket) => {
     }
 });
 
-const getClientIp = (socket) => {
-    const remoteAddress = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
-
-    if (!remoteAddress) return '0.0.0.0';
-
-    let ip = remoteAddress.split(',')[0].trim();
-
-    if (ip.includes('::ffff:')) {
-        ip = ip.split(':').pop();
-    }
-    return ip;
-};
-
-// Socket io Connection for Frontend
 frontendIo.on("connection", async (socket) => {
     console.log(chalk.greenBright(`[+] Frontend Connected (${socket.id})`))
 
@@ -545,19 +527,6 @@ frontendIo.on("connection", async (socket) => {
         }
     });
 
-    socket.on("validate_config", () => {
-        console.log(chalk.cyan(`[i] Restart request received via WS from frontend ${socket.id}`));
-
-        try {
-            androidIo.emit("restart", { timestamp: Date.now() });
-            frontendIo.emit("restart", { timestamp: Date.now() });
-            socket.emit("restart_response", { success: true, message: 'Restart request sent' });
-        } catch (error) {
-            console.error('Restart request error:', error);
-            socket.emit("restart_response", { success: false, error: error.message });
-        }
-    });
-
     socket.on("get_screenshots", async (deviceId) => {
         try {
             const screenshotsDir = 'screenshots';
@@ -606,21 +575,10 @@ frontendIo.on("connection", async (socket) => {
         }
     });
 
-    // Helper function to ensure server URL has correct namespace
-    function appendAndroidNameSpace(url) {
-        if (!url.endsWith('/')) {
-            url += '/';
-        }
-        if (!url.endsWith('/android/')) {
-            url += 'android';
-        }
-        return url;
-    }
-
     socket.on("build_request", async (data) => {
         const { serverUrl } = data;
         console.log(`Build request for URL: ${serverUrl}`);
-        const androidUrl = appendAndroidNameSpace(serverUrl);
+        const androidUrl = normalizeUrl(serverUrl);
         console.log(`Using Android URL: ${androidUrl}`);
         frontendIo.emit("build_started", { androidUrl });
 
@@ -801,23 +759,17 @@ frontendIo.on("connection", async (socket) => {
 
             // Get current config and normalize URLs
             const currentConfig = await db.getDeviceConfig(device_uuid);
-            const defaultConfig = await db.getDefaultConfig();
+            if (!currentConfig) {
+                throw new Error('Device config not found');
+            }
 
             // Extract host base from URLs for comparison (ignore paths/namespaces)
             const newHost = getHostBase(normalizedServerUrl);
-            const currentHost = currentConfig
-                ? getHostBase(currentConfig.server_url)
-                : (defaultConfig ? getHostBase(defaultConfig.server_url) : null);
-
-            // Debug logging
-            console.log(chalk.cyan(`[DEBUG] Host comparison: newHost="${newHost}", currentHost="${currentHost}"`));
+            const currentHost = getHostBase(currentConfig.server_url);
 
             // Check if there's a host change and not yet confirmed
-            const hasHostChange = currentHost && newHost && newHost !== currentHost;
 
-            console.log(chalk.cyan(`[DEBUG] hasHostChange: ${hasHostChange}`));
-
-            if (!hasHostChange) {
+            if (newHost === currentHost) {
                 await db.upsertDeviceConfig(
                     device_uuid,
                     normalizedServerUrl,
@@ -826,12 +778,11 @@ frontendIo.on("connection", async (socket) => {
                 );
                 console.log(chalk.green(`[+] Config updated for device ${device_uuid} by frontend ${socket.id}`));
             } else if (!confirmed) {
-                console.log(chalk.green(`[+] normalizedServerUrl: ${normalizedServerUrl} for device ${device_uuid}`)); // Debug log
                 socket.emit("device_config_host_change_warning", {
                     device_uuid,
                     current_host: currentHost,
                     new_host: newHost,
-                    message: `You are about to change the server URL from ${currentHost}/android to ${newHost}/android. The device will reconnect to the new server. Do you want to continue?`
+                    message: `You are about to change the server URL from ${currentConfig.server_url} to ${normalizedServerUrl}. The device will reconnect to the new server. Do you want to continue?`
                 });
                 return;
             } else {
@@ -848,7 +799,6 @@ frontendIo.on("connection", async (socket) => {
                     auto_screenshot
                 };
                 device.socket.emit("config_data", newConfig);
-                console.log(chalk.blue(`[i] Sent ${hasHostChange ? 'migration' : 'updated'} config to device ${device_uuid}`));
             }
 
             // Finally confirm to frontend

