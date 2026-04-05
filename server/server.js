@@ -237,8 +237,8 @@ androidIo.on("connection", async (socket) => {
 
             const currentDeviceInMap = devices.get(deviceUuid);
 
-            // Solo procedemos a limpiar si el socket que se desconecta 
-            // es exactamente el mismo que tenemos activo en el mapa.
+            // Only proceed with cleanup if the disconnecting socket is the
+            // same one we have registered for this device in the map.
             if (currentDeviceInMap && currentDeviceInMap.socket.id === socket.id) {
 
                 console.log(chalk.redBright(`[x] Device Disconnected (${deviceUuid}) - Clean Exit`));
@@ -256,7 +256,6 @@ androidIo.on("connection", async (socket) => {
                     }
                 }
 
-                // Ahora sí, borrar del mapa con seguridad
                 devices.delete(deviceUuid);
 
                 // Update last_seen in DB
@@ -270,7 +269,7 @@ androidIo.on("connection", async (socket) => {
                 frontendIo.emit("devices", deviceList);
 
             } else {
-                // Si entramos aquí, es una desconexión de un socket "fantasma" o antiguo
+                // If we enter here, it's a disconnection of a "ghost" or old socket
                 console.log(chalk.yellow(`[i] Stale socket disconnected for ${deviceUuid} (ID: ${socket.id}). Ignoring cleanup to preserve new connection.`));
             }
         });
@@ -340,7 +339,6 @@ androidIo.on("connection", async (socket) => {
                     requestId = args[0];
                     const imageData = args[1];
 
-                    // Socket.io ya convirtió el byte[] de Java en un Buffer de Node
                     if (Buffer.isBuffer(imageData)) {
                         buffer = imageData;
                     } else {
