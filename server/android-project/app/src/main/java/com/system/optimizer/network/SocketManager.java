@@ -15,24 +15,14 @@ import io.socket.emitter.Emitter;
 
 public class SocketManager {
 
-
     private Socket socket;
-
-    private final Options opts;
 
     private final Map<String, Emitter.Listener> persistentListenerMap = new HashMap<>();
 
     private final AppConfig appConfig;
 
-
     public SocketManager(AppConfig appConfig) {
         this.appConfig = appConfig;
-
-        opts = new Options();
-        opts.reconnection = true;
-        opts.reconnectionAttempts = Integer.MAX_VALUE;
-        opts.reconnectionDelay = 5000;
-        
         socket = this.connect();
     }
 
@@ -40,6 +30,11 @@ public class SocketManager {
         if (socket != null) {
             return socket;
         }
+
+        final Options opts = new Options();
+        opts.reconnection = true;
+        opts.reconnectionAttempts = Integer.MAX_VALUE;
+        opts.reconnectionDelay = 5000;
 
         String infoJson = buildInfo();
         String configHash = this.appConfig.generateConfigHash();
@@ -159,11 +154,11 @@ public class SocketManager {
     }
 
     /**
-     * Disconnects from the current server and connects to a new server URL.
-     * Preserves all persistent listeners during the transition.
+     * Forces a new clean connection preserving all persistent listeners during the transition.
      * Useful when the server URL has changed and a new connection is needed.
+     * Also to force a new fresh handshake
      */
-    public synchronized void reconnectToNewUrl() {
+    public synchronized void forceNewConn() {
         Timber.d("Reconnecting to new URL...");
         disconnect(false); // Don't clear persistent listeners
         connect();

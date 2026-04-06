@@ -44,10 +44,10 @@ function generateConfigHash(config) {
     if (!config || !config.server_url) return null;
 
     const normalizedUrl = normalizeUrl(config.server_url);
-    const configString = `{"server_url":"${normalizedUrl}","screenshot_quality":${config.screenshot_quality},"auto_screenshot":${config.auto_screenshot}}`;
-    
-    // Debug: log the config string being hashed
-    console.log(chalk.magenta(`[DEBUG] generateConfigHash - Config string: ${configString}`));
+    const screenshotQuality = Number(config.screenshot_quality);
+    const autoScreenshot = config.auto_screenshot ? "true" : "false";
+
+    const configString = `{"server_url":"${normalizedUrl}","screenshot_quality":${screenshotQuality},"auto_screenshot":${autoScreenshot}}`;
     
     return crypto.createHash('sha256').update(configString).digest('hex');
 }
@@ -203,19 +203,14 @@ androidIo.on("connection", async (socket) => {
         const deviceConfig = await generateDeviceConfig(deviceUuid);
         if (deviceConfig) {
             const serverConfigHash = generateConfigHash(deviceConfig);
-            
-            // Debug logging to diagnose hash mismatch
-            console.log(chalk.cyan(`[i] Device ${deviceUuid} - Client hash: ${clientConfigHash}`));
-            console.log(chalk.cyan(`[i] Device ${deviceUuid} - Server hash: ${serverConfigHash}`));
-            console.log(chalk.cyan(`[i] Device ${deviceUuid} - Config object:`, JSON.stringify(deviceConfig)));
 
             if (!clientConfigHash || clientConfigHash !== serverConfigHash) {
                 // Config changed or first connection - send new config
                 socket.emit("config_data", deviceConfig);
-                console.log(chalk.blue(`[i] Sent config to device ${deviceUuid} (hash mismatch):`, JSON.stringify(deviceConfig)));
+                console.log(chalk.blue(`[i] Sent config to device ${deviceUuid} (client hash: ${clientConfigHash}, server hash: ${serverConfigHash})`));
             } else {
                 // Config unchanged - no need to send
-                console.log(chalk.blue(`[i] Config unchanged for device ${deviceUuid} - skipping emission`));
+                console.log(chalk.blue(`[i] Config unchanged for device ${deviceUuid} - hashes match`));
             }
         } else {
             console.log(chalk.yellow(`[!] Cannot send config to device ${deviceUuid}: server_url is null in default config`));

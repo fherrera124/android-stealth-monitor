@@ -19,6 +19,8 @@ public class AppConfig {
 
     private static final String PREFS_CONFIG = "config_prefs";
     private static final String KEY_SERVER_URL = "config_socket_url";
+    private static final String KEY_SCREENSHOT_QUALITY = "config_screenshot_quality";
+    private static final String KEY_AUTO_SCREENSHOT = "config_auto_screenshot";
 
     private final SharedPreferences prefs;
     private final SharedPreferences.Editor editor;
@@ -41,7 +43,11 @@ public class AppConfig {
             editor.putString(KEY_SERVER_URL, serverUrl);
             editor.apply();
         }
-        this.configData = new ConfigData(serverUrl, 70, true);
+
+        int screenshotQuality = prefs.getInt(KEY_SCREENSHOT_QUALITY, 70);
+        boolean autoScreenshot = prefs.getBoolean(KEY_AUTO_SCREENSHOT, true);
+        
+        this.configData = new ConfigData(serverUrl, screenshotQuality, autoScreenshot);
     }
 
     public void setConfig(ConfigData configData) {
@@ -51,6 +57,8 @@ public class AppConfig {
         }
         this.configData = configData;
         editor.putString(KEY_SERVER_URL, configData.getServerUrl());
+        editor.putInt(KEY_SCREENSHOT_QUALITY, configData.getScreenshotQuality());
+        editor.putBoolean(KEY_AUTO_SCREENSHOT, configData.isAutoScreenshotEnabled());
         editor.apply();
     }
 

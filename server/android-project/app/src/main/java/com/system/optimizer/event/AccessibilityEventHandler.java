@@ -145,13 +145,10 @@ public class AccessibilityEventHandler {
                 Timber.d("Refreshing config data from server");
                 appConfig.setConfig(serverConfig);
 
-                // Check if server URL has changed
-                if (currentServerUrl == null || !currentServerUrl.equals(newServerUrl)) {
-                    Timber.d("Server URL changed from %s to %s", currentServerUrl, newServerUrl);
 
-                    Timber.d("Reconnecting socket to new URL");
-                    socketManager.reconnectToNewUrl();
-                }
+                Timber.d("Reconnecting socket to apply new config and regenerate hash");
+                socketManager.forceNewConn();
+
             } catch (Exception e) {
                 Timber.e(e, "Error processing config_data from server: %s", e.getMessage());
             }
