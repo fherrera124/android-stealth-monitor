@@ -53,7 +53,7 @@ function generateConfigHash(config) {
 }
 
 // Generate device config from default config
-async function generateDeviceConfig(deviceUuid, socketId) {
+async function generateDeviceConfig(deviceUuid) {
     try {
         // Check if config already exists for this device
         let deviceConfig = await db.getDeviceConfig(deviceUuid);
@@ -70,7 +70,7 @@ async function generateDeviceConfig(deviceUuid, socketId) {
         const defaultConfig = await db.getDefaultConfig();
 
         if (!defaultConfig) {
-            console.log(chalk.yellow(`[!] Cannot generate config for device ${deviceUuid} (${socketId}): default config not found`));
+            console.log(chalk.yellow(`[!] Cannot generate config for device ${deviceUuid}: default config not found`));
             return null;
         }
 
@@ -82,7 +82,7 @@ async function generateDeviceConfig(deviceUuid, socketId) {
             defaultConfig.auto_screenshot
         );
 
-        console.log(chalk.blue(`[i] Generated config for device ${deviceUuid} (${socketId}) from default config`));
+        console.log(chalk.blue(`[i] Generated config for device ${deviceUuid} from default config`));
 
         return {
             server_url: normalizeUrl(defaultConfig.server_url),
@@ -778,7 +778,7 @@ frontendIo.on("connection", async (socket) => {
             } else {
                 // Delete device-specific config completely - device now belongs to new server
                 await db.deleteDeviceConfig(device_uuid);
-                console.log(chalk.yellow(`[!] Host change detected - deleted device config, device migrated to new server`));
+                console.log(chalk.yellow(`[!] Host change detected - deleted device config, device ${device_uuid} migrated to new server`));
             }
             // Then send config to device if connected
             const device = devices.get(device_uuid);

@@ -478,16 +478,28 @@ function updateDefaultConfigUI(newDefaultConfig) {
     document.getElementById('broadcast-config-btn').disabled = !newDefaultConfig.server_url;
 }
 
+function normalizeUrl(url, namespace = 'android') {
+    if (!url) return null;
+    try {
+        const parsed = new URL(url);
+        const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+        let path = parsed.pathname || '';
+        path = path.replace(/\/+$/, '');
+        if (!path.endsWith(`/${namespace}`)) {
+            path = path + '/' + namespace;
+        }
+        return `${parsed.protocol}//${parsed.hostname.toLowerCase()}:${port}${path}`;
+    } catch (e) {
+        return null;
+    }
+}
+
 function checkServerUrlMismatch() {
     const serverUrl = document.getElementById('default-server-url').value.trim();
-    const currentUrl = window.location.origin;
+    const currentUrlNormalized = normalizeUrl(window.location.origin);
     const setUrlBtn = document.getElementById('set-current-url-btn');
     
-    // Remove /android namespace from server URL for comparison
-    const serverUrlBase = serverUrl.replace(/\/android$/, '');
-    
-    // Show button if field is empty or URL doesn't match current URL
-    if (!serverUrl || serverUrlBase !== currentUrl) {
+    if (!serverUrl || !currentUrlNormalized || serverUrl !== currentUrlNormalized) {
         setUrlBtn.style.display = 'inline-block';
     } else {
         setUrlBtn.style.display = 'none';
@@ -495,7 +507,7 @@ function checkServerUrlMismatch() {
 }
 
 function setCurrentUrl() {
-    const currentUrl = window.location.origin + '/android';
+    const currentUrl = normalizeUrl(window.location.origin);
     document.getElementById('default-server-url').value = currentUrl;
     checkServerUrlMismatch();
     checkDefaultConfigChanges();
