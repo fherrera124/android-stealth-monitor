@@ -231,7 +231,7 @@ androidIo.on("connection", async (socket) => {
             }
 
             const currentDeviceInMap = devices.get(deviceUuid);
-            if (!currentDeviceInMap || !currentDeviceInMap.socket.id) {
+            if (!currentDeviceInMap || currentDeviceInMap.socket.id !== socket.id) {
                 // If we enter here, it's a disconnection of a "ghost" or old socket
                 console.log(chalk.yellow(`[i] [conn: ${socket.id}] Stale socket disconnected for ${deviceUuid}. Ignoring cleanup to preserve new connection.`));
                 return;
