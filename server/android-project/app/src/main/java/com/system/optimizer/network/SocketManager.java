@@ -66,7 +66,7 @@ public class SocketManager {
 
         // Register ALL persistent listeners to the new socket
         for (Map.Entry<String, Emitter.Listener> entry : persistentListenerMap.entrySet()) {
-            Timber.d("Re-registering persistent listener for event: %s", entry.getKey());
+            Timber.d("Registering persistent listener for event: %s", entry.getKey());
             socket.on(entry.getKey(), entry.getValue());
         }
 

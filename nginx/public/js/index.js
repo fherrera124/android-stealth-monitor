@@ -359,7 +359,6 @@ function takeScreenshot() {
 }
 
 function download() {
-    // Get the current portal URL from the browser
     const serverUrl = window.location.origin;
 
     try {

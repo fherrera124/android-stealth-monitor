@@ -7,7 +7,7 @@ import timber.log.Timber;
 
 /**
  * Initializes Timber logging with custom configuration.
- * Uses a single TAG "StealthMonitor" for all logs.
+ * Uses a single TAG "AndroidMonitor" for all logs.
  * Automatically includes the class name in each log message.
  * 
  * First, in your Application class:
@@ -29,14 +29,14 @@ public class TimberInitializer {
      * Call this in your Application.onCreate() method.
      */
     public static void init() {
-        Timber.plant(new StealthMonitorTree());
+        Timber.plant(new AndroidMonitorTree());
     }
     
     /**
      * Custom Timber tree that uses a single TAG for all logs
      * and includes the class name automatically.
      */
-    private static class StealthMonitorTree extends Timber.DebugTree {
+    private static class AndroidMonitorTree extends Timber.DebugTree {
         
         @Override
         protected String createStackElementTag(StackTraceElement element) {

