@@ -8,6 +8,7 @@ export default defineConfig({
       input: './frontend/index.html'
     },
     outDir: './nginx/public',
-    emptyOutDir: true
+    emptyOutDir: true,
+    publicDir: false
   }
 })
