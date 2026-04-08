@@ -15,6 +15,7 @@ WORKDIR /app
 # Copy source
 COPY package.json ./
 COPY vite.config.js ./
+COPY server/server.js ./server/server.js
 COPY server/ ./server/
 COPY frontend/ ./frontend/
 
