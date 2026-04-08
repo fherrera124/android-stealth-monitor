@@ -4,8 +4,6 @@ services:
       context: .
       dockerfile: ./server/Dockerfile
     volumes:
-      - ./server:/app
-      - /app/node_modules
       - ./screenshots:/app/screenshots
       - ./server/android-project:/android-project
       - ./server/android-project/gradle:/root/.gradle
