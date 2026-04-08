@@ -6,7 +6,7 @@ export default defineConfig({
   root: './server/frontend',
   build: {
     rollupOptions: {
-      input: './server/frontend/index.html'
+      input: 'index.html'
     },
     outDir: './public',
     emptyOutDir: true
