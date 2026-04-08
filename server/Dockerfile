@@ -23,11 +23,4 @@ COPY frontend/ ./frontend/
 RUN npm install && npm cache clean --force
 
 # Build frontend ON STARTUP (not during build) so it fills the shared volume properly
-CMD sh -c "
-  echo '🔨 Building React frontend...'
-  npm run build
-  echo '✅ React build completed, files generated in /app/nginx/public'
-  ls -la /app/nginx/public/
-  echo '🚀 Starting node server...'
-  node server.js
-"
+CMD sh -c "echo '🔨 Building React frontend...' && npm run build && echo '✅ React build completed' && ls -la /app/nginx/public/ && echo '🚀 Starting node server...' && node server.js"
