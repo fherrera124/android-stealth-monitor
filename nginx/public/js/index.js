@@ -77,7 +77,7 @@ async function getInfo(id) {
 
     if (id != "None") {
         socket.emit("get_device_info", id);
-        // Load device config if config tab is active
+// Load device config if config tab is active
         if (document.getElementById('config-tab').classList.contains('active')) {
             loadDeviceConfig();
         }
@@ -119,12 +119,36 @@ socket.on("device_logs", (logs) => {
 socket.on("devices", (data) => {
     // console.log(data)
     devicesList = data // Store devices list for reference
+    
+    // Check if current device is still in the list
+    const deviceStillConnected = data.some(d => d.ID === currentDevice);
+
+    // If current device disappeared, clear global state
+    if (currentDevice && !deviceStillConnected) {
+        console.log('Device disconnected:', currentDevice);
+        currentDevice = "";
+        previousDevice = "";
+
+        // Hide device config UI if config tab is active
+        if (document.getElementById('config-tab').classList.contains('active')) {
+            hideDeviceConfigUI();
+        }
+
+        // If logs tab is active, clear logs output
+        if (document.getElementById('logs-tab').classList.contains('active')) {
+            output.value = "";
+            updateScreenshotButton();
+        }
+    }
+    
     devices.innerHTML = '<option data-display="Devices">None</option>'
     data.forEach(i => {
         devices.insertAdjacentHTML("beforeend", `<option value="${i.ID}">${i.Brand} (${i.Model})</option>`)
     })
+    
     // Update nice-select after modifying options
     $("select").niceSelect("update")
+    
     // Update screenshot button state after devices are loaded
     updateScreenshotButton()
 })

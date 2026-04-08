@@ -78,9 +78,7 @@ public class SocketManager {
     /**
      * Add a persistent listener. Intended for registering listeners
      * on new socket connections, as it will store the listener in a map and
-     * re-register it on any new socket instance created by connect(). This ensures
-     * that listeners remain active even if the socket disconnects and reconnects
-     * due to network issues or server changes.
+     * re-register it on any new socket instance created by connect().
      * 
      * @param event    The event name to listen for
      * @param listener The listener to invoke when the event is received
