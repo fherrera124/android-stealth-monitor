@@ -15,6 +15,11 @@ services:
       - NODE_ENV=production
       - ANDROID_HOME=/opt/android-sdk
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "test", "-f", "/app/nginx/public/index.html"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
     networks:
       - internal
       - default
@@ -28,6 +33,14 @@ services:
     ports:
       - "4000:4000"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "test", "-f", "/usr/share/nginx/html/index.html"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    depends_on:
+      android-server:
+        condition: service_healthy
     networks:
       - internal
       - default
