@@ -5,6 +5,8 @@
 !docker-compose.yml
 !nginx/
 !server/
+!package.json
+!vite.config.js
 !README.md
 !settings.json.example
 !.gitignore
