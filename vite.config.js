@@ -7,7 +7,7 @@ export default defineConfig({
     rollupOptions: {
       input: './frontend/index.html'
     },
-    outDir: './public',
+    outDir: './nginx/public',
     emptyOutDir: true
   }
 })

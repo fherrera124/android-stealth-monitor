@@ -7,7 +7,6 @@ services:
       - ./screenshots:/app/screenshots
       - ./server/android-project:/android-project
       - ./server/android-project/gradle:/root/.gradle
-      - ./nginx/public:/app/public
     environment:
       - NODE_ENV=production
       - ANDROID_HOME=/opt/android-sdk

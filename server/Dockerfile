@@ -15,11 +15,11 @@ WORKDIR /app
 # Copy source
 COPY package.json ./
 COPY vite.config.js ./
-COPY server/server.js ./server/server.js
-COPY server/ ./server/
+COPY server/server.js ./server.js
+COPY server/ ./
 COPY frontend/ ./frontend/
 
 # Install dependencies and build frontend
 RUN npm install && npm cache clean --force && npm run build
 
-CMD ["node", "server/server.js"]
+CMD ["node", "server.js"]
