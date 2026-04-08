@@ -5,6 +5,7 @@
 !docker-compose.yml
 !nginx/
 !server/
+!frontend/
 !package.json
 !vite.config.js
 !README.md

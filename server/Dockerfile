@@ -16,6 +16,7 @@ WORKDIR /app
 COPY package.json ./
 COPY vite.config.js ./
 COPY server/ ./server/
+COPY frontend/ ./frontend/
 
 # Install dependencies and build frontend
 RUN npm install && npm cache clean --force && npm run build

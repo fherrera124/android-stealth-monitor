@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     rollupOptions: {
-      input: './server/frontend/index.html'
+      input: './frontend/index.html'
     },
     outDir: './public',
     emptyOutDir: true
