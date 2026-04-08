@@ -1,3 +1,6 @@
+volumes:
+  react-build:
+
 services:
   android-server:
     build:
@@ -7,6 +10,7 @@ services:
       - ./screenshots:/app/screenshots
       - ./server/android-project:/android-project
       - ./server/android-project/gradle:/root/.gradle
+      - react-build:/app/nginx/public
     environment:
       - NODE_ENV=production
       - ANDROID_HOME=/opt/android-sdk
@@ -19,7 +23,7 @@ services:
     image: nginx:alpine
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./nginx/public:/usr/share/nginx/html:ro
+      - react-build:/usr/share/nginx/html:ro
       - ./screenshots:/usr/share/nginx/screenshots:ro
     ports:
       - "4000:4000"

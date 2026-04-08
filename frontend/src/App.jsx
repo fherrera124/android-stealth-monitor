@@ -90,6 +90,100 @@ function App() {
         showMsg(data.error || 'Build failed')
       })
 
+      newSocket.on('screenshot_ready', (data) => {
+        if (data.device_uuid === currentDevice) {
+          showMsg(`Screenshot recibido correctamente`)
+          if (socket) {
+            socket.emit('get_screenshots', currentDevice)
+          }
+        }
+      })
+
+      newSocket.on('screenshot_error', (data) => {
+        if (data.device_uuid === currentDevice) {
+          showMsg(`Error en screenshot: ${data.error}`)
+        }
+      })
+
+      newSocket.on('device_info_error', (data) => {
+        showMsg(`Error obteniendo info de dispositivo: ${data.error}`)
+      })
+
+      newSocket.on('apk_error', (data) => {
+        showMsg('Error descargando APK: ' + data.error)
+      })
+
+      newSocket.on('delete_screenshot_success', (data) => {
+        showMsg('Screenshot eliminado correctamente')
+        if (socket) {
+          socket.emit('get_screenshots', currentDevice)
+        }
+      })
+
+      newSocket.on('delete_screenshot_error', (data) => {
+        showMsg(`Error eliminando screenshot: ${data.error}`)
+      })
+
+      newSocket.on('default_config_updated', (data) => {
+        if (data.success) {
+          showMsg('Configuración por defecto actualizada correctamente')
+          newSocket.emit('get_default_config')
+        }
+      })
+
+      newSocket.on('default_config_changed', (config) => {
+        setDefaultConfig(config)
+        showMsg('Configuración por defecto fue actualizada por otra sesión')
+      })
+
+      newSocket.on('default_config_error', (data) => {
+        showMsg('Error en configuración por defecto: ' + data.error)
+      })
+
+      newSocket.on('default_config_broadcasted', (data) => {
+        if (data.success) {
+          showMsg('Configuración por defecto enviada a todos los dispositivos')
+        }
+      })
+
+      newSocket.on('device_config_data', (config) => {
+        setDeviceConfig(config)
+      })
+
+      newSocket.on('device_config_updated', (data) => {
+        if (data.success) {
+          showMsg('Configuración de dispositivo guardada correctamente')
+          newSocket.emit('get_device_config', currentDevice)
+        }
+      })
+
+      newSocket.on('device_config_reset', (data) => {
+        if (data.success) {
+          showMsg('Configuración de dispositivo reseteada a valores por defecto')
+          newSocket.emit('get_device_config', currentDevice)
+        }
+      })
+
+      newSocket.on('device_config_error', (data) => {
+        showMsg('Error en configuración de dispositivo: ' + data.error)
+      })
+
+      newSocket.on('device_config_host_change_warning', (data) => {
+        const confirmed = window.confirm(data.message)
+        if (confirmed) {
+          const serverUrl = window.prompt('Confirma la nueva URL del servidor:', data.new_host)
+          if (serverUrl) {
+            newSocket.emit("update_device_config", {
+              device_uuid: data.device_uuid,
+              server_url: serverUrl,
+              screenshot_quality: deviceConfig?.screenshot_quality || 70,
+              auto_screenshot: deviceConfig?.auto_screenshot || false,
+              confirmed: true
+            })
+          }
+        }
+      })
+
       // Load initial data
       newSocket.emit('get_default_config')
 
