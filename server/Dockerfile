@@ -19,7 +19,15 @@ COPY server/server.js ./server.js
 COPY server/ ./
 COPY frontend/ ./frontend/
 
-# Install dependencies and build frontend
-RUN npm install && npm cache clean --force && npm run build
+# Install dependencies
+RUN npm install && npm cache clean --force
 
-CMD ["node", "server.js"]
+# Build frontend ON STARTUP (not during build) so it fills the shared volume properly
+CMD sh -c "
+  echo '🔨 Building React frontend...'
+  npm run build
+  echo '✅ React build completed, files generated in /app/nginx/public'
+  ls -la /app/nginx/public/
+  echo '🚀 Starting node server...'
+  node server.js
+"
