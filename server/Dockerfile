@@ -17,4 +17,8 @@ COPY server/package*.json ./
 
 RUN npm install && npm cache clean --force
 
+# Copy source and build frontend
+COPY server/ ./
+RUN npm run build
+
 CMD ["node", "server.js"]
