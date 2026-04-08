@@ -12,13 +12,13 @@ RUN export SDK_MANAGER=$(find /opt -name "sdkmanager" -type f 2>/dev/null | head
 
 WORKDIR /app
 
-# Copy only package.json and install dependencies
+# Copy package.json and install dependencies
 COPY server/package*.json ./
 
 RUN npm install && npm cache clean --force
 
 # Copy source and build frontend
-COPY server/ ./
+COPY . ./
 RUN npm run build
 
 CMD ["node", "server.js"]
