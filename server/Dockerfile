@@ -21,4 +21,4 @@ COPY frontend/ ./frontend/
 # Install dependencies and build frontend
 RUN npm install && npm cache clean --force && npm run build
 
-CMD ["node", "server.js"]
+CMD ["node", "server/server.js"]
