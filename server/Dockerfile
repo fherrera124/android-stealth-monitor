@@ -13,7 +13,9 @@ RUN export SDK_MANAGER=$(find /opt -name "sdkmanager" -type f 2>/dev/null | head
 WORKDIR /app
 
 # Copy source
-COPY . ./
+COPY package.json ./
+COPY vite.config.js ./
+COPY server/ ./server/
 
 # Install dependencies and build frontend
 RUN npm install && npm cache clean --force && npm run build
