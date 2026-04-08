@@ -5,7 +5,10 @@ export default defineConfig({
   plugins: [react()],
   root: './server/frontend',
   build: {
-    outDir: '../public',
+    rollupOptions: {
+      input: './server/frontend/index.html'
+    },
+    outDir: './public',
     emptyOutDir: true
   }
 })
